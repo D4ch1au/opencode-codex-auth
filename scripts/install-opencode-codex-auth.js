@@ -11,7 +11,7 @@ const PLUGIN_NAME = "opencode-codex-auth";
 const args = new Set(process.argv.slice(2));
 
 if (args.has("--help") || args.has("-h")) {
-	console.log(`Usage: ${PLUGIN_NAME} [--modern|--legacy] [--uninstall] [--all] [--dry-run] [--no-cache-clear]\n\n` +
+	console.log(`Usage: ${PLUGIN_NAME} [--modern|--legacy] [--uninstall] [--all] [--dry-run] [--no-cache-clear] [--accounts]\n\n` +
 		"Default behavior:\n" +
 		"  - Installs/updates global config at ~/.config/opencode/opencode.jsonc (falls back to .json)\n" +
 		"  - Uses modern config (variants) by default\n" +
@@ -23,8 +23,15 @@ if (args.has("--help") || args.has("-h")) {
 		"  --uninstall        Remove plugin + OpenAI config entries from global config\n" +
 		"  --all              With --uninstall, also remove tokens, logs, and cached instructions\n" +
 		"  --dry-run          Show actions without writing\n" +
-		"  --no-cache-clear   Skip clearing OpenCode cache\n"
+		"  --no-cache-clear   Skip clearing OpenCode cache\n" +
+		"  --accounts         Manage logged-in accounts (interactive TUI)\n"
 	);
+	process.exit(0);
+}
+
+if (args.has("--accounts")) {
+	const { manageAccounts } = await import("./manage-accounts.js");
+	await manageAccounts();
 	process.exit(0);
 }
 
