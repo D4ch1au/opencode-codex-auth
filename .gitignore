@@ -1,0 +1,10 @@
+node_modules/
+bun.lockb
+pnpm-lock.yaml
+dist/
+.DS_Store
+.history/
+opencode.json
+.opencode/
+tmp
+.codex-cache
