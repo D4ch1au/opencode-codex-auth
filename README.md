@@ -104,7 +104,7 @@ Available strategies:
 View and manage your logged-in accounts with an interactive TUI:
 
 ```bash
-npx opencode-codex-auth --accounts
+npx -y opencode-codex-auth@latest --accounts
 ```
 
 The panel shows each account's status (active, cooldown, disabled, expired), last used time, and lets you:
