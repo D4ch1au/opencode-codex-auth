@@ -75,6 +75,7 @@ export const AUTH_LABELS = {
 	OAUTH: "ChatGPT Plus/Pro (Codex Subscription)",
 	OAUTH_MANUAL: "ChatGPT Plus/Pro (Manual URL Paste)",
 	API_KEY: "Manually enter API Key",
+	MANAGE_ACCOUNTS: "Manage Accounts",
 	INSTRUCTIONS:
 		"A browser window should open. If it doesn't, copy the URL and open it manually.",
 	INSTRUCTIONS_MANUAL:

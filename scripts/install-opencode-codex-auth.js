@@ -30,7 +30,7 @@ if (args.has("--help") || args.has("-h")) {
 }
 
 if (args.has("--accounts")) {
-	const { manageAccounts } = await import("./manage-accounts.js");
+	const { manageAccounts } = await import("../dist/lib/ui/account-manager.js");
 	await manageAccounts();
 	process.exit(0);
 }

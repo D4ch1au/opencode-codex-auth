@@ -67,6 +67,7 @@ import {
 	transformRequestForCodex,
 } from "./lib/request/fetch-helpers.js";
 import type { UserConfig } from "./lib/types.js";
+import { manageAccounts } from "./lib/ui/account-manager.js";
 
 /**
  * OpenAI Codex OAuth authentication plugin for opencode
@@ -477,11 +478,19 @@ export const OpenAIAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 							return buildManualOAuthFlow(pkce, url);
 						},
 					},
-					{
-						label: AUTH_LABELS.API_KEY,
-						type: "api" as const,
+				{
+					label: AUTH_LABELS.API_KEY,
+					type: "api" as const,
+				},
+				{
+					label: AUTH_LABELS.MANAGE_ACCOUNTS,
+					type: "api" as const,
+					authorize: async () => {
+						await manageAccounts();
+						return { type: "failed" as const };
 					},
-			],
+				},
+		],
 		},
 	};
 };

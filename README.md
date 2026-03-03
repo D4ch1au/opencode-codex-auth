@@ -101,7 +101,13 @@ Available strategies:
 
 ### Account Manager
 
-View and manage your logged-in accounts with an interactive TUI:
+View and manage your logged-in accounts with an interactive TUI.
+
+**Via `opencode auth login`** (recommended):
+
+Select "Manage Accounts" from the login method list to open the account manager panel directly within OpenCode.
+
+**Via CLI**:
 
 ```bash
 npx -y opencode-codex-auth@latest --accounts
