@@ -98,6 +98,22 @@ Available strategies:
 
 - `round_robin` (default): rotate through eligible accounts
 - `sticky`: keep using last successful account until it cools down or fails
+
+### Account Manager
+
+View and manage your logged-in accounts with an interactive TUI:
+
+```bash
+npx opencode-codex-auth --accounts
+```
+
+The panel shows each account's status (active, cooldown, disabled, expired), last used time, and lets you:
+
+- Enable/disable individual accounts
+- Clear cooldown timers
+- Delete accounts
+- View detailed account info (token expiry, failure count, cooldown remaining)
+
 ---
 ## 📚 Docs
 - Getting Started: `docs/getting-started.md`
