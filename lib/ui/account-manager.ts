@@ -89,6 +89,26 @@ function formatRateLimitWindow(window: AccountRateLimitWindow | undefined): stri
 	return `${used} (${remaining})${windowPart}${resetPart}`;
 }
 
+function formatWindowBrief(window: AccountRateLimitWindow | undefined, label: string): string {
+	if (!window) return "";
+	return `${label}: ${window.remainingPercent.toFixed(0)}%`;
+}
+
+function buildAccountHint(account: OAuthAccountRecord): string {
+	const parts: string[] = [];
+	parts.push(`last used: ${formatRelativeTime(account.lastUsedAt)}`);
+
+	const rl = account.rateLimits;
+	if (rl) {
+		const pri = formatWindowBrief(rl.primary, rl.primary?.windowMinutes ? `${rl.primary.windowMinutes}m` : "5h");
+		const sec = formatWindowBrief(rl.secondary, rl.secondary?.windowMinutes ? `${rl.secondary.windowMinutes}m` : "weekly");
+		if (pri) parts.push(pri);
+		if (sec) parts.push(sec);
+	}
+
+	return parts.join(" | ");
+}
+
 function buildSummary(accounts: OAuthAccountRecord[]): string {
 	if (accounts.length === 0) return "No accounts configured";
 
@@ -228,20 +248,20 @@ export async function manageAccounts(): Promise<void> {
 
 		const items: MenuItem<MainMenuAction>[] = [];
 
-		if (accounts.length > 0) {
-			items.push({ type: "separator", label: "Accounts", value: { type: "exit" } });
+	if (accounts.length > 0) {
+		items.push({ type: "separator", label: "Accounts", value: { type: "exit" } });
 
-			for (let i = 0; i < accounts.length; i++) {
-				const account = accounts[i];
-				const status = getAccountStatus(account);
-				items.push({
-					label: `Account #${i + 1}: ${truncateId(account.accountId)}`,
-					value: { type: "select-account", index: i },
-					badge: formatStatusBadge(status, account),
-					hint: `last used: ${formatRelativeTime(account.lastUsedAt)}${typeof account.rateLimits?.primary?.remainingPercent === "number" ? `, remaining: ${account.rateLimits.primary.remainingPercent.toFixed(1)}%` : ""}`,
-				});
-			}
+		for (let i = 0; i < accounts.length; i++) {
+			const account = accounts[i];
+			const status = getAccountStatus(account);
+			items.push({
+				label: `Account #${i + 1}: ${truncateId(account.accountId)}`,
+				value: { type: "select-account", index: i },
+				badge: formatStatusBadge(status, account),
+				hint: buildAccountHint(account),
+			});
 		}
+	}
 
 		items.push({ type: "separator", label: "Actions", value: { type: "exit" } });
 		items.push({
