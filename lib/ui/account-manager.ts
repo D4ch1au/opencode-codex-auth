@@ -90,8 +90,8 @@ function formatRateLimitWindow(window: AccountRateLimitWindow | undefined): stri
 }
 
 function formatWindowBrief(window: AccountRateLimitWindow | undefined, label: string): string {
-	if (!window) return "";
-	return `${label}: ${window.remainingPercent.toFixed(0)}%`;
+	if (!window) return `${label}: N/A`;
+	return `${label}: ${window.usedPercent.toFixed(1)}% used`;
 }
 
 function buildAccountHint(account: OAuthAccountRecord): string {
@@ -99,12 +99,9 @@ function buildAccountHint(account: OAuthAccountRecord): string {
 	parts.push(`last used: ${formatRelativeTime(account.lastUsedAt)}`);
 
 	const rl = account.rateLimits;
-	if (rl) {
-		const pri = formatWindowBrief(rl.primary, rl.primary?.windowMinutes ? `${rl.primary.windowMinutes}m` : "5h");
-		const sec = formatWindowBrief(rl.secondary, rl.secondary?.windowMinutes ? `${rl.secondary.windowMinutes}m` : "weekly");
-		if (pri) parts.push(pri);
-		if (sec) parts.push(sec);
-	}
+	const pri = formatWindowBrief(rl?.primary, "5h");
+	const sec = formatWindowBrief(rl?.secondary, "weekly");
+	parts.push(pri, sec);
 
 	return parts.join(" | ");
 }
