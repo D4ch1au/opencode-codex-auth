@@ -40,6 +40,7 @@ import {
 	selectAccountForRequest,
 	shouldRefreshStoredAccount,
 	syncCurrentAuthIntoPool,
+	updateAccountRateLimits,
 	updateAccountTokens,
 	upsertTokenSuccessIntoPool,
 } from "./lib/account-pool.js";
@@ -59,9 +60,11 @@ import { logRequest, logDebug } from "./lib/logger.js";
 import {
 	classifyAccountErrorResponse,
 	createCodexHeaders,
+	extractAccountRateLimits,
 	extractRequestUrl,
 	handleErrorResponse,
 	handleSuccessResponse,
+	parseRetryAfterFromResponse,
 	refreshAccountTokenWithLock,
 	rewriteUrlForCodex,
 	transformRequestForCodex,
@@ -202,7 +205,7 @@ export const OpenAIAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 						const url = rewriteUrlForCodex(originalUrl);
 
 						// Step 3: Transform request body with model-specific Codex instructions
-					// Instructions are fetched per model family (gpt-5.3-codex, gpt-5.2-codex, codex-max, codex, gpt-5.2, gpt-5.1)
+					// Instructions are fetched per model family (gpt-5.4, gpt-5.3-codex, gpt-5.2-codex, codex-max, codex, gpt-5.2, gpt-5.1)
 						// Capture original stream value before transformation
 						// generateText() sends no stream field, streamText() sends stream=true
 						const originalBody = init?.body ? JSON.parse(init.body as string) : {};
@@ -286,6 +289,8 @@ export const OpenAIAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 								model: transformation?.body.model,
 								promptCacheKey: transformation?.body.prompt_cache_key,
 							};
+							let responseAccountId = activeAccount.accountId;
+							let hasRateLimitSnapshot = false;
 
 							let headers = createCodexHeaders(
 								requestInit,
@@ -306,6 +311,17 @@ export const OpenAIAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 								statusText: response.statusText,
 								headers: Object.fromEntries(response.headers.entries()),
 							});
+
+							const initialRateLimits = extractAccountRateLimits(response.headers);
+							if (initialRateLimits) {
+								hasRateLimitSnapshot =
+									updateAccountRateLimits(
+										accountPool,
+										responseAccountId,
+										initialRateLimits,
+										Date.now(),
+									) !== null;
+							}
 
 							let errorClass = response.ok
 								? "none"
@@ -339,6 +355,7 @@ export const OpenAIAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 									}
 
 									if (updated) {
+										responseAccountId = updated.accountId;
 										headers = createCodexHeaders(
 											requestInit,
 											updated.accountId,
@@ -359,6 +376,20 @@ export const OpenAIAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 											headers: Object.fromEntries(response.headers.entries()),
 										});
 
+										const refreshedRateLimits = extractAccountRateLimits(
+											response.headers,
+										);
+										if (refreshedRateLimits) {
+											hasRateLimitSnapshot =
+												updateAccountRateLimits(
+													accountPool,
+													responseAccountId,
+													refreshedRateLimits,
+													Date.now(),
+												) !== null
+												|| hasRateLimitSnapshot;
+										}
+
 										errorClass = response.ok
 											? "none"
 											: await classifyAccountErrorResponse(response);
@@ -367,26 +398,37 @@ export const OpenAIAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 							}
 
 							if (response.ok) {
-								markAccountSuccess(accountPool, activeAccount.accountId, Date.now());
+								markAccountSuccess(accountPool, responseAccountId, Date.now());
 								saveAccountPoolState(accountPool);
 								return await handleSuccessResponse(response, isStreaming);
 							}
 
 							if (errorClass === "rate_limit" || errorClass === "auth") {
-								const cooldownSeconds =
-									errorClass === "rate_limit"
-										? runtimeAccountConfig.rateLimitCooldownSeconds
-										: runtimeAccountConfig.authFailureCooldownSeconds;
+								let cooldownSeconds: number;
+
+								if (errorClass === "rate_limit") {
+									const serverRetryAfter = await parseRetryAfterFromResponse(response);
+									cooldownSeconds =
+										serverRetryAfter != null
+											? Math.max(serverRetryAfter, 60)
+											: runtimeAccountConfig.rateLimitCooldownSeconds;
+								} else {
+									cooldownSeconds = runtimeAccountConfig.authFailureCooldownSeconds;
+								}
 
 								markAccountFailure(
 									accountPool,
-									activeAccount.accountId,
+									responseAccountId,
 									cooldownSeconds,
 									Date.now(),
 								);
 								saveAccountPoolState(accountPool);
 								lastResponse = response;
 								continue;
+							}
+
+							if (hasRateLimitSnapshot) {
+								saveAccountPoolState(accountPool);
 							}
 
 							return await handleErrorResponse(response);

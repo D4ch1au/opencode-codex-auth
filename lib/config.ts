@@ -15,10 +15,10 @@ const CONFIG_PATH = join(homedir(), ".opencode", "codex-auth-config.json");
  */
 const DEFAULT_CONFIG: PluginConfig = {
 	codexMode: true,
-	accountSelectionStrategy: "round_robin",
-	rateLimitCooldownSeconds: 300,
-	authFailureCooldownSeconds: 90,
-	maxAccountsPerRequest: 5,
+	accountSelectionStrategy: "sticky",
+	rateLimitCooldownSeconds: 900,
+	authFailureCooldownSeconds: 270,
+	maxAccountsPerRequest: 1,
 };
 
 const ALLOWED_SELECTION_STRATEGIES: ReadonlySet<AccountSelectionStrategy> = new Set([
@@ -50,19 +50,19 @@ function normalizePluginConfig(userConfig: Partial<PluginConfig>): PluginConfig 
 		accountSelectionStrategy: strategy,
 		rateLimitCooldownSeconds: clampInteger(
 			userConfig.rateLimitCooldownSeconds,
-			DEFAULT_CONFIG.rateLimitCooldownSeconds ?? 300,
+			DEFAULT_CONFIG.rateLimitCooldownSeconds ?? 900,
 			1,
 			7200,
 		),
 		authFailureCooldownSeconds: clampInteger(
 			userConfig.authFailureCooldownSeconds,
-			DEFAULT_CONFIG.authFailureCooldownSeconds ?? 90,
+			DEFAULT_CONFIG.authFailureCooldownSeconds ?? 270,
 			0,
 			3600,
 		),
 		maxAccountsPerRequest: clampInteger(
 			userConfig.maxAccountsPerRequest,
-			DEFAULT_CONFIG.maxAccountsPerRequest ?? 5,
+			DEFAULT_CONFIG.maxAccountsPerRequest ?? 1,
 			1,
 			32,
 		),
@@ -113,9 +113,9 @@ export function getCodexMode(pluginConfig: PluginConfig): boolean {
 
 export function getRuntimeAccountConfig(pluginConfig: PluginConfig): RuntimeAccountConfig {
 	return {
-		strategy: pluginConfig.accountSelectionStrategy ?? "round_robin",
-		rateLimitCooldownSeconds: pluginConfig.rateLimitCooldownSeconds ?? 300,
-		authFailureCooldownSeconds: pluginConfig.authFailureCooldownSeconds ?? 90,
-		maxAccountsPerRequest: pluginConfig.maxAccountsPerRequest ?? 5,
+		strategy: pluginConfig.accountSelectionStrategy ?? "sticky",
+		rateLimitCooldownSeconds: pluginConfig.rateLimitCooldownSeconds ?? 900,
+		authFailureCooldownSeconds: pluginConfig.authFailureCooldownSeconds ?? 270,
+		maxAccountsPerRequest: pluginConfig.maxAccountsPerRequest ?? 1,
 	};
 }

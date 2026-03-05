@@ -3,6 +3,24 @@ import { getModelFamily } from "../lib/prompts/codex.js";
 
 describe("Codex Module", () => {
 	describe("getModelFamily", () => {
+		describe("GPT-5.4 family", () => {
+			it("should return gpt-5.4 for gpt-5.4", () => {
+				expect(getModelFamily("gpt-5.4")).toBe("gpt-5.4");
+			});
+
+			it("should return gpt-5.4 for gpt-5.4-low", () => {
+				expect(getModelFamily("gpt-5.4-low")).toBe("gpt-5.4");
+			});
+
+			it("should return gpt-5.4 for gpt-5.4-xhigh", () => {
+				expect(getModelFamily("gpt-5.4-xhigh")).toBe("gpt-5.4");
+			});
+
+			it("should return gpt-5.4 for gpt-5.4-none", () => {
+				expect(getModelFamily("gpt-5.4-none")).toBe("gpt-5.4");
+			});
+		});
+
 		describe("GPT-5.3 Codex family", () => {
 			it("should return gpt-5.3-codex for gpt-5.3-codex", () => {
 				expect(getModelFamily("gpt-5.3-codex")).toBe("gpt-5.3-codex");
@@ -108,6 +126,10 @@ describe("Codex Module", () => {
 		});
 
 		describe("Priority order", () => {
+			it("should prioritize gpt-5.4 over gpt-5.3-codex", () => {
+				expect(getModelFamily("gpt-5.4")).toBe("gpt-5.4");
+			});
+
 			it("should prioritize gpt-5.3-codex over codex", () => {
 				expect(getModelFamily("gpt-5.3-codex")).toBe("gpt-5.3-codex");
 			});

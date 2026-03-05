@@ -172,6 +172,62 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRes
 }
 
 /**
+ * Check if a refresh error is non-retryable (e.g., refresh_token_reused).
+ * These errors indicate the refresh token has been invalidated and retrying is futile.
+ */
+function isNonRetryableRefreshError(error: unknown): boolean {
+	if (!error) return false;
+	const message = error instanceof Error ? error.message : String(error);
+	return /refresh_token_reused/i.test(message);
+}
+
+/**
+ * Refresh access token with linear backoff retry.
+ * Matches CLIProxyAPI's RefreshTokensWithRetry pattern:
+ *  - Up to `maxRetries` attempts (default 3)
+ *  - Linear backoff: attempt * 1000ms delay between retries
+ *  - Non-retryable errors (refresh_token_reused) abort immediately
+ *
+ * @param refreshToken - Current refresh token
+ * @param maxRetries - Maximum number of attempts (default 3)
+ * @returns Token result
+ */
+export async function refreshAccessTokenWithRetry(
+	refreshToken: string,
+	maxRetries = 3,
+): Promise<TokenResult> {
+	let lastResult: TokenResult = { type: "failed" };
+
+	for (let attempt = 0; attempt < maxRetries; attempt++) {
+		if (attempt > 0) {
+			await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+		}
+
+		try {
+			const result = await refreshAccessToken(refreshToken);
+			if (result.type === "success") {
+				return result;
+			}
+			lastResult = result;
+		} catch (error) {
+			if (isNonRetryableRefreshError(error)) {
+				console.error(
+					`[openai-codex-plugin] Token refresh attempt ${attempt + 1} failed with non-retryable error:`,
+					error,
+				);
+				return { type: "failed" };
+			}
+			console.warn(
+				`[openai-codex-plugin] Token refresh attempt ${attempt + 1} failed:`,
+				error,
+			);
+		}
+	}
+
+	return lastResult;
+}
+
+/**
  * Create OAuth authorization flow
  * @returns Authorization flow details
  */

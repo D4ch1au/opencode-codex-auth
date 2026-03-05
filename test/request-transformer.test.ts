@@ -91,14 +91,25 @@ describe('Request Transformer Module', () => {
 				expect(normalizeModel('openai/gpt-5.2-codex-xhigh')).toBe('gpt-5.2-codex');
 			});
 
-			it('should normalize gpt-5.3 codex presets', async () => {
-				expect(normalizeModel('gpt-5.3-codex')).toBe('gpt-5.3-codex');
-				expect(normalizeModel('gpt-5.3-codex-low')).toBe('gpt-5.3-codex');
-				expect(normalizeModel('gpt-5.3-codex-medium')).toBe('gpt-5.3-codex');
-				expect(normalizeModel('gpt-5.3-codex-high')).toBe('gpt-5.3-codex');
-				expect(normalizeModel('gpt-5.3-codex-xhigh')).toBe('gpt-5.3-codex');
-				expect(normalizeModel('openai/gpt-5.3-codex-xhigh')).toBe('gpt-5.3-codex');
-			});
+		it('should normalize gpt-5.4 presets', async () => {
+			expect(normalizeModel('gpt-5.4')).toBe('gpt-5.4');
+			expect(normalizeModel('gpt-5.4-none')).toBe('gpt-5.4');
+			expect(normalizeModel('gpt-5.4-low')).toBe('gpt-5.4');
+			expect(normalizeModel('gpt-5.4-medium')).toBe('gpt-5.4');
+			expect(normalizeModel('gpt-5.4-high')).toBe('gpt-5.4');
+			expect(normalizeModel('gpt-5.4-xhigh')).toBe('gpt-5.4');
+			expect(normalizeModel('openai/gpt-5.4-xhigh')).toBe('gpt-5.4');
+			expect(normalizeModel('openai/gpt-5.4')).toBe('gpt-5.4');
+		});
+
+		it('should normalize gpt-5.3 codex presets', async () => {
+			expect(normalizeModel('gpt-5.3-codex')).toBe('gpt-5.3-codex');
+			expect(normalizeModel('gpt-5.3-codex-low')).toBe('gpt-5.3-codex');
+			expect(normalizeModel('gpt-5.3-codex-medium')).toBe('gpt-5.3-codex');
+			expect(normalizeModel('gpt-5.3-codex-high')).toBe('gpt-5.3-codex');
+			expect(normalizeModel('gpt-5.3-codex-xhigh')).toBe('gpt-5.3-codex');
+			expect(normalizeModel('openai/gpt-5.3-codex-xhigh')).toBe('gpt-5.3-codex');
+		});
 
 			it('should normalize gpt-5.1 codex and mini slugs', async () => {
 				expect(normalizeModel('gpt-5.1-codex')).toBe('gpt-5.1-codex');
@@ -808,6 +819,75 @@ describe('Request Transformer Module', () => {
 			expect(result.include).toEqual(['custom_field', 'reasoning.encrypted_content']);
 		});
 
+		it('should map long-context options from model config', async () => {
+			const body: RequestBody = {
+				model: 'gpt-5.4',
+				input: [],
+			};
+			const userConfig: UserConfig = {
+				global: {},
+				models: {
+					'gpt-5.4': {
+						options: {
+							modelContextWindow: 1000000,
+							modelAutoCompactTokenLimit: 900000,
+						},
+					},
+				},
+			};
+
+			const result = await transformRequestBody(body, codexInstructions, userConfig);
+			expect(result.model_context_window).toBe(1000000);
+			expect(result.model_auto_compact_token_limit).toBe(900000);
+		});
+
+		it('should map long-context options from providerOptions when present', async () => {
+			const body: RequestBody = {
+				model: 'gpt-5.4',
+				input: [],
+				providerOptions: {
+					openai: {
+						modelContextWindow: 1000000,
+						modelAutoCompactTokenLimit: 900000,
+					},
+				},
+			};
+
+			const result = await transformRequestBody(body, codexInstructions);
+			expect(result.model_context_window).toBe(1000000);
+			expect(result.model_auto_compact_token_limit).toBe(900000);
+		});
+
+		it('should prefer explicit request long-context fields over providerOptions and config', async () => {
+			const body: RequestBody = {
+				model: 'gpt-5.4',
+				input: [],
+				model_context_window: 750000,
+				model_auto_compact_token_limit: 700000,
+				providerOptions: {
+					openai: {
+						modelContextWindow: 1000000,
+						modelAutoCompactTokenLimit: 900000,
+					},
+				},
+			};
+			const userConfig: UserConfig = {
+				global: {},
+				models: {
+					'gpt-5.4': {
+						options: {
+							modelContextWindow: 1000000,
+							modelAutoCompactTokenLimit: 900000,
+						},
+					},
+				},
+			};
+
+			const result = await transformRequestBody(body, codexInstructions, userConfig);
+			expect(result.model_context_window).toBe(750000);
+			expect(result.model_auto_compact_token_limit).toBe(700000);
+		});
+
 		it('should remove IDs from input array (keep all items, strip IDs)', async () => {
 			const body: RequestBody = {
 				model: 'gpt-5',
@@ -925,42 +1005,47 @@ describe('Request Transformer Module', () => {
 			expect(result.reasoning?.effort).toBe('high');
 		});
 
-		it('should preserve xhigh for codex-max when requested', async () => {
+		it('should default gpt-5.4 to high effort', async () => {
 			const body: RequestBody = {
-				model: 'gpt-5.1-codex-max-xhigh',
+				model: 'gpt-5.4',
+				input: [],
+			};
+			const result = await transformRequestBody(body, codexInstructions);
+			expect(result.model).toBe('gpt-5.4');
+			expect(result.reasoning?.effort).toBe('high');
+		});
+
+		it('should preserve xhigh for gpt-5.4 when requested', async () => {
+			const body: RequestBody = {
+				model: 'gpt-5.4-xhigh',
 				input: [],
 			};
 			const userConfig: UserConfig = {
 				global: { reasoningSummary: 'auto' },
 				models: {
-					'gpt-5.1-codex-max-xhigh': {
+					'gpt-5.4-xhigh': {
 						options: { reasoningEffort: 'xhigh', reasoningSummary: 'detailed' },
 					},
 				},
 			};
 			const result = await transformRequestBody(body, codexInstructions, userConfig);
-			expect(result.model).toBe('gpt-5.1-codex-max');
+			expect(result.model).toBe('gpt-5.4');
 			expect(result.reasoning?.effort).toBe('xhigh');
 			expect(result.reasoning?.summary).toBe('detailed');
 		});
 
-		it('should preserve xhigh for gpt-5.2-codex when requested', async () => {
+		it('should preserve none for GPT-5.4', async () => {
 			const body: RequestBody = {
-				model: 'gpt-5.2-codex-xhigh',
+				model: 'gpt-5.4-none',
 				input: [],
 			};
 			const userConfig: UserConfig = {
-				global: { reasoningSummary: 'auto' },
-				models: {
-					'gpt-5.2-codex-xhigh': {
-						options: { reasoningEffort: 'xhigh', reasoningSummary: 'detailed' },
-					},
-				},
+				global: { reasoningEffort: 'none' },
+				models: {},
 			};
 			const result = await transformRequestBody(body, codexInstructions, userConfig);
-			expect(result.model).toBe('gpt-5.2-codex');
-			expect(result.reasoning?.effort).toBe('xhigh');
-			expect(result.reasoning?.summary).toBe('detailed');
+			expect(result.model).toBe('gpt-5.4');
+			expect(result.reasoning?.effort).toBe('none');
 		});
 
 		it('should preserve xhigh for gpt-5.3-codex when requested', async () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import * as authModule from '../lib/auth/auth.js';
 import {
 	classifyAccountErrorResponse,
@@ -8,14 +8,22 @@ import {
 	extractRequestUrl,
 	rewriteUrlForCodex,
 	createCodexHeaders,
+	extractAccountRateLimits,
 	handleErrorResponse,
+	parseRetryAfterFromResponse,
 } from '../lib/request/fetch-helpers.js';
 import type { Auth } from '../lib/types.js';
-import { URL_PATHS, OPENAI_HEADERS, OPENAI_HEADER_VALUES } from '../lib/constants.js';
+import { URL_PATHS, OPENAI_HEADERS, OPENAI_HEADER_VALUES, CODEX_CLIENT } from '../lib/constants.js';
 
 describe('Fetch Helpers Module', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
+	});
+
+	beforeEach(() => {
+		vi.spyOn(authModule, 'refreshAccessTokenWithRetry').mockImplementation(async (refreshToken: string) => {
+			return authModule.refreshAccessToken(refreshToken);
+		});
 	});
 
 	describe('shouldRefreshToken', () => {
@@ -80,9 +88,12 @@ describe('Fetch Helpers Module', () => {
 					expires: 123,
 				},
 			});
-			expect(updated.access).toBe('new');
-			expect(updated.refresh).toBe('newr');
-			expect(updated.expires).toBe(123);
+			expect(updated.type).toBe('oauth');
+			if (updated.type === 'oauth') {
+				expect(updated.access).toBe('new');
+				expect(updated.refresh).toBe('newr');
+				expect(updated.expires).toBe(123);
+			}
 		});
 	});
 
@@ -212,6 +223,136 @@ describe('Fetch Helpers Module', () => {
 		it('returns none for non-retryable statuses', async () => {
 			const response = new Response('bad request', { status: 400 });
 			await expect(classifyAccountErrorResponse(response)).resolves.toBe('none');
+		});
+	});
+
+	describe('extractAccountRateLimits', () => {
+		it('extracts primary and secondary usage from codex headers', () => {
+			const headers = new Headers({
+				'x-codex-primary-used-percent': '42.5',
+				'x-codex-primary-window-minutes': '300',
+				'x-codex-primary-reset-at': '1742000000',
+				'x-codex-secondary-used-percent': '10',
+				'x-codex-secondary-window-minutes': '10080',
+				'x-codex-secondary-reset-at': '1742600000',
+				'x-codex-limit-name': 'codex',
+			});
+
+			const snapshot = extractAccountRateLimits(headers, 1234567890);
+
+			expect(snapshot).toEqual({
+				limitName: 'codex',
+				promoMessage: undefined,
+				primary: {
+					usedPercent: 42.5,
+					remainingPercent: 57.5,
+					windowMinutes: 300,
+					resetsAt: 1742000000_000,
+				},
+				secondary: {
+					usedPercent: 10,
+					remainingPercent: 90,
+					windowMinutes: 10080,
+					resetsAt: 1742600000_000,
+				},
+				updatedAt: 1234567890,
+			});
+		});
+
+		it('returns null when no rate-limit headers are present', () => {
+			const headers = new Headers({
+				'content-type': 'application/json',
+			});
+
+			expect(extractAccountRateLimits(headers)).toBeNull();
+		});
+
+		it('clamps used percent into [0, 100] range', () => {
+			const headers = new Headers({
+				'x-codex-primary-used-percent': '250',
+			});
+
+			const snapshot = extractAccountRateLimits(headers);
+			expect(snapshot?.primary?.usedPercent).toBe(100);
+			expect(snapshot?.primary?.remainingPercent).toBe(0);
+		});
+	});
+
+	describe('createCodexHeaders fingerprint headers', () => {
+		const accountId = 'test-account-123';
+		const accessToken = 'test-access-token';
+
+		it('sets User-Agent matching official Codex CLI', () => {
+			const headers = createCodexHeaders(undefined, accountId, accessToken);
+			expect(headers.get('User-Agent')).toBe(CODEX_CLIENT.USER_AGENT);
+		});
+
+		it('sets Version header matching official Codex CLI', () => {
+			const headers = createCodexHeaders(undefined, accountId, accessToken);
+			expect(headers.get('Version')).toBe(CODEX_CLIENT.VERSION);
+		});
+
+		it('sets Connection: Keep-Alive header', () => {
+			const headers = createCodexHeaders(undefined, accountId, accessToken);
+			expect(headers.get('Connection')).toBe('Keep-Alive');
+		});
+	});
+
+	describe('parseRetryAfterFromResponse', () => {
+		it('returns null for non-429 responses', async () => {
+			const response = new Response('ok', { status: 200 });
+			expect(await parseRetryAfterFromResponse(response)).toBeNull();
+		});
+
+		it('returns null for 429 without usage_limit_reached type', async () => {
+			const body = { error: { type: 'rate_limit_exceeded', message: 'slow down' } };
+			const response = new Response(JSON.stringify(body), { status: 429 });
+			expect(await parseRetryAfterFromResponse(response)).toBeNull();
+		});
+
+		it('prefers resets_at over resets_in_seconds', async () => {
+			const now = 1700000000000; // ms
+			const resetsAtUnix = 1700000300; // 300 seconds in the future (in seconds)
+			const body = {
+				error: {
+					type: 'usage_limit_reached',
+					resets_at: resetsAtUnix,
+					resets_in_seconds: 100,
+				},
+			};
+			const response = new Response(JSON.stringify(body), { status: 429 });
+			const result = await parseRetryAfterFromResponse(response, now);
+			expect(result).toBe(300);
+		});
+
+		it('falls back to resets_in_seconds when resets_at is in the past', async () => {
+			const now = 1700000000000;
+			const body = {
+				error: {
+					type: 'usage_limit_reached',
+					resets_at: 1699999000, // in the past
+					resets_in_seconds: 120,
+				},
+			};
+			const response = new Response(JSON.stringify(body), { status: 429 });
+			const result = await parseRetryAfterFromResponse(response, now);
+			expect(result).toBe(120);
+		});
+
+		it('returns null when 429 body is empty', async () => {
+			const response = new Response('', { status: 429 });
+			expect(await parseRetryAfterFromResponse(response)).toBeNull();
+		});
+
+		it('returns null when 429 body is not valid JSON', async () => {
+			const response = new Response('not json', { status: 429 });
+			expect(await parseRetryAfterFromResponse(response)).toBeNull();
+		});
+
+		it('returns null when error has no reset fields', async () => {
+			const body = { error: { type: 'usage_limit_reached' } };
+			const response = new Response(JSON.stringify(body), { status: 429 });
+			expect(await parseRetryAfterFromResponse(response)).toBeNull();
 		});
 	});
 

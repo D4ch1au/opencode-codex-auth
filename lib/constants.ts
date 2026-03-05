@@ -39,6 +39,20 @@ export const OPENAI_HEADER_VALUES = {
 	ORIGINATOR_CODEX: "codex_cli_rs",
 } as const;
 
+/**
+ * Codex CLI fingerprint constants — match the official Rust CLI binary
+ * to reduce detection surface against server-side client fingerprinting.
+ *
+ * Values sourced from: codex_cli_rs v0.101.0 (latest stable)
+ */
+export const CODEX_CLIENT = {
+	/** Version string sent in the `Version` header */
+	VERSION: "0.101.0",
+	/** User-Agent matching the official macOS Codex CLI binary */
+	USER_AGENT:
+		"codex_cli_rs/0.101.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464",
+} as const;
+
 /** URL path segments */
 export const URL_PATHS = {
 	RESPONSES: "/responses",

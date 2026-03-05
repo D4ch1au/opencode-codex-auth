@@ -11,27 +11,42 @@ export interface PluginConfig {
 	codexMode?: boolean;
 	/**
 	 * Account selection strategy for multi-account rotation
-	 * @default "round_robin"
+	 * @default "sticky"
 	 */
 	accountSelectionStrategy?: AccountSelectionStrategy;
 	/**
 	 * Cooldown applied after rate limit errors (seconds)
-	 * @default 300
+	 * @default 900
 	 */
 	rateLimitCooldownSeconds?: number;
 	/**
 	 * Cooldown applied after auth errors (seconds)
-	 * @default 90
+	 * @default 270
 	 */
 	authFailureCooldownSeconds?: number;
 	/**
 	 * Maximum number of accounts to try per request
-	 * @default 5
+	 * @default 1
 	 */
 	maxAccountsPerRequest?: number;
 }
 
 export type AccountSelectionStrategy = "round_robin" | "sticky";
+
+export interface AccountRateLimitWindow {
+	usedPercent: number;
+	remainingPercent: number;
+	windowMinutes?: number;
+	resetsAt?: number;
+}
+
+export interface AccountRateLimitSnapshot {
+	limitName?: string;
+	promoMessage?: string;
+	primary?: AccountRateLimitWindow;
+	secondary?: AccountRateLimitWindow;
+	updatedAt: number;
+}
 
 export interface OAuthAccountRecord {
 	accountId: string;
@@ -43,8 +58,11 @@ export interface OAuthAccountRecord {
 	lastUsedAt?: number;
 	lastFailureAt?: number;
 	failureCount?: number;
+	/** Progressive backoff level — incremented on consecutive rate-limit failures, reset on success */
+	backoffLevel?: number;
 	cooldownUntil?: number;
 	disabled?: boolean;
+	rateLimits?: AccountRateLimitSnapshot;
 }
 
 export interface AccountPoolState {
@@ -83,6 +101,16 @@ export interface ConfigOptions {
 	reasoningSummary?: "auto" | "concise" | "detailed" | "off" | "on";
 	textVerbosity?: "low" | "medium" | "high";
 	include?: string[];
+	/**
+	 * Experimental context window override for GPT-5.4 Codex/API.
+	 * Sent as `model_context_window`.
+	 */
+	modelContextWindow?: number;
+	/**
+	 * Auto-compaction threshold for long-context requests.
+	 * Sent as `model_auto_compact_token_limit`.
+	 */
+	modelAutoCompactTokenLimit?: number;
 }
 
 /**
@@ -192,6 +220,10 @@ export interface RequestBody {
 	};
 	/** Stable key to enable prompt-token caching on Codex backend */
 	prompt_cache_key?: string;
+	/** Optional long-context override for supported models (e.g., GPT-5.4). */
+	model_context_window?: number;
+	/** Optional auto-compaction threshold for long-context runs. */
+	model_auto_compact_token_limit?: number;
 	max_output_tokens?: number;
 	max_completion_tokens?: number;
 	[key: string]: unknown;

@@ -5,6 +5,8 @@ import type { Auth } from "@opencode-ai/sdk";
 import { JWT_CLAIM_PATH } from "./constants.js";
 import { decodeJWT } from "./auth/auth.js";
 import type {
+	AccountRateLimitSnapshot,
+	AccountRateLimitWindow,
 	AccountPoolState,
 	AccountSelectionStrategy,
 	OAuthAccountRecord,
@@ -34,6 +36,46 @@ function toFiniteNumber(value: unknown, fallback: number): number {
 	return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function normalizeRateLimitWindow(value: unknown): AccountRateLimitWindow | undefined {
+	if (!isRecord(value)) return undefined;
+	if (typeof value.usedPercent !== "number" || !Number.isFinite(value.usedPercent)) return undefined;
+	if (typeof value.remainingPercent !== "number" || !Number.isFinite(value.remainingPercent)) return undefined;
+
+	return {
+		usedPercent: value.usedPercent,
+		remainingPercent: value.remainingPercent,
+		windowMinutes:
+			typeof value.windowMinutes === "number" && Number.isFinite(value.windowMinutes)
+				? value.windowMinutes
+				: undefined,
+		resetsAt:
+			typeof value.resetsAt === "number" && Number.isFinite(value.resetsAt)
+				? value.resetsAt
+				: undefined,
+	};
+}
+
+function normalizeRateLimitSnapshot(value: unknown): AccountRateLimitSnapshot | undefined {
+	if (!isRecord(value)) return undefined;
+
+	const primary = normalizeRateLimitWindow(value.primary);
+	const secondary = normalizeRateLimitWindow(value.secondary);
+	if (!primary && !secondary) return undefined;
+
+	const updatedAt =
+		typeof value.updatedAt === "number" && Number.isFinite(value.updatedAt)
+			? value.updatedAt
+			: Date.now();
+
+	return {
+		primary,
+		secondary,
+		updatedAt,
+		limitName: typeof value.limitName === "string" ? value.limitName : undefined,
+		promoMessage: typeof value.promoMessage === "string" ? value.promoMessage : undefined,
+	};
+}
+
 function normalizeAccountRecord(value: unknown): OAuthAccountRecord | null {
 	if (!isRecord(value)) return null;
 	if (typeof value.accountId !== "string" || value.accountId.length === 0) return null;
@@ -52,9 +94,11 @@ function normalizeAccountRecord(value: unknown): OAuthAccountRecord | null {
 		lastUsedAt: typeof value.lastUsedAt === "number" ? value.lastUsedAt : undefined,
 		lastFailureAt: typeof value.lastFailureAt === "number" ? value.lastFailureAt : undefined,
 		failureCount: typeof value.failureCount === "number" ? value.failureCount : undefined,
+		backoffLevel: typeof value.backoffLevel === "number" ? value.backoffLevel : undefined,
 		cooldownUntil:
 			typeof value.cooldownUntil === "number" ? value.cooldownUntil : undefined,
 		disabled: value.disabled === true,
+		rateLimits: normalizeRateLimitSnapshot(value.rateLimits),
 	};
 }
 
@@ -219,6 +263,7 @@ export function markAccountSuccess(
 	account.lastUsedAt = now;
 	account.updatedAt = now;
 	account.failureCount = 0;
+	account.backoffLevel = 0;
 	account.lastFailureAt = undefined;
 	account.cooldownUntil = undefined;
 	account.disabled = false;
@@ -237,9 +282,18 @@ export function markAccountFailure(
 	account.lastFailureAt = now;
 	account.updatedAt = now;
 	account.failureCount = (account.failureCount ?? 0) + 1;
-	if (cooldownSeconds > 0) {
-		account.cooldownUntil = now + cooldownSeconds * 1000;
+
+	// Progressive backoff: multiply cooldown by 2^backoffLevel, capped at 4x
+	const level = account.backoffLevel ?? 0;
+	const multiplier = Math.min(Math.pow(2, level), 4);
+	const effectiveCooldown = Math.ceil(cooldownSeconds * multiplier);
+
+	if (effectiveCooldown > 0) {
+		account.cooldownUntil = now + effectiveCooldown * 1000;
 	}
+
+	// Increment backoff level for next failure (cap at 2 so max multiplier stays at 4x)
+	account.backoffLevel = Math.min(level + 1, 2);
 }
 
 export function updateAccountTokens(
@@ -256,6 +310,23 @@ export function updateAccountTokens(
 	account.expires = tokens.expires;
 	account.updatedAt = now;
 	account.disabled = false;
+	return account;
+}
+
+export function updateAccountRateLimits(
+	pool: AccountPoolState,
+	accountId: string,
+	rateLimits: AccountRateLimitSnapshot,
+	now = Date.now(),
+): OAuthAccountRecord | null {
+	const account = pool.accounts.find((entry) => entry.accountId === accountId);
+	if (!account) return null;
+
+	account.rateLimits = {
+		...rateLimits,
+		updatedAt: rateLimits.updatedAt || now,
+	};
+	account.updatedAt = now;
 	return account;
 }
 

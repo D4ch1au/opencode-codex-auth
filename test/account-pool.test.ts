@@ -6,6 +6,7 @@ import {
 	markAccountFailure,
 	markAccountSuccess,
 	selectAccountForRequest,
+	updateAccountRateLimits,
 	upsertAccountRecord,
 } from "../lib/account-pool.js";
 import type { Auth, RuntimeAccountConfig } from "../lib/types.js";
@@ -82,6 +83,42 @@ describe("account-pool", () => {
 		});
 	});
 
+	describe("updateAccountRateLimits", () => {
+		it("stores primary/secondary remaining percentages for an account", () => {
+			const pool = createDefaultAccountPoolState();
+			const created = createAccountRecordFromAuth(createOAuthAuth("acct-a", 1000), 100);
+			expect(created).not.toBeNull();
+			upsertAccountRecord(pool, created!);
+
+			const updated = updateAccountRateLimits(
+				pool,
+				"acct-a",
+				{
+					primary: {
+						usedPercent: 42.5,
+						remainingPercent: 57.5,
+						windowMinutes: 300,
+						resetsAt: 1_742_000_000_000,
+					},
+					secondary: {
+						usedPercent: 10,
+						remainingPercent: 90,
+						windowMinutes: 10080,
+						resetsAt: 1_743_000_000_000,
+					},
+					limitName: "codex",
+					updatedAt: 200,
+				},
+				250,
+			);
+
+			expect(updated).not.toBeNull();
+			expect(pool.accounts[0].rateLimits?.primary?.remainingPercent).toBe(57.5);
+			expect(pool.accounts[0].rateLimits?.secondary?.remainingPercent).toBe(90);
+			expect(pool.accounts[0].rateLimits?.limitName).toBe("codex");
+		});
+	});
+
 	describe("selectAccountForRequest", () => {
 		it("round-robin rotates eligible accounts", () => {
 			const pool = createDefaultAccountPoolState();
@@ -149,6 +186,73 @@ describe("account-pool", () => {
 			};
 
 			expect(limitAttemptCount(pool, runtime)).toBe(2);
+		});
+	});
+
+	describe("markAccountFailure with progressive backoff", () => {
+		it("first failure uses base cooldown (1x multiplier)", () => {
+			const pool = createDefaultAccountPoolState();
+			const record = createAccountRecordFromAuth(createOAuthAuth("acct-a", 2000), 100);
+			expect(record).not.toBeNull();
+			upsertAccountRecord(pool, record!);
+
+			markAccountFailure(pool, "acct-a", 100, 1000);
+
+			const account = pool.accounts[0];
+			// level 0 → multiplier 2^0 = 1 → cooldown = 100 * 1 = 100s
+			expect(account.cooldownUntil).toBe(1000 + 100 * 1000);
+			expect(account.backoffLevel).toBe(1);
+		});
+
+		it("second failure doubles cooldown (2x multiplier)", () => {
+			const pool = createDefaultAccountPoolState();
+			const record = createAccountRecordFromAuth(createOAuthAuth("acct-a", 2000), 100);
+			expect(record).not.toBeNull();
+			upsertAccountRecord(pool, record!);
+
+			markAccountFailure(pool, "acct-a", 100, 1000);
+			// After first: backoffLevel = 1
+			markAccountFailure(pool, "acct-a", 100, 200_000);
+
+			const account = pool.accounts[0];
+			// level 1 → multiplier 2^1 = 2 → cooldown = 100 * 2 = 200s
+			expect(account.cooldownUntil).toBe(200_000 + 200 * 1000);
+			expect(account.backoffLevel).toBe(2);
+		});
+
+		it("third failure caps at 4x multiplier", () => {
+			const pool = createDefaultAccountPoolState();
+			const record = createAccountRecordFromAuth(createOAuthAuth("acct-a", 2000), 100);
+			expect(record).not.toBeNull();
+			upsertAccountRecord(pool, record!);
+
+			markAccountFailure(pool, "acct-a", 100, 1000);
+			markAccountFailure(pool, "acct-a", 100, 200_000);
+			// After second: backoffLevel = 2
+			markAccountFailure(pool, "acct-a", 100, 500_000);
+
+			const account = pool.accounts[0];
+			// level 2 → multiplier 2^2 = 4 → cooldown = 100 * 4 = 400s
+			expect(account.cooldownUntil).toBe(500_000 + 400 * 1000);
+			// backoffLevel stays capped at 2
+			expect(account.backoffLevel).toBe(2);
+		});
+	});
+
+	describe("markAccountSuccess resets backoff", () => {
+		it("resets backoffLevel to 0 on success", () => {
+			const pool = createDefaultAccountPoolState();
+			const record = createAccountRecordFromAuth(createOAuthAuth("acct-a", 2000), 100);
+			expect(record).not.toBeNull();
+			upsertAccountRecord(pool, record!);
+
+			markAccountFailure(pool, "acct-a", 100, 1000);
+			markAccountFailure(pool, "acct-a", 100, 200_000);
+			expect(pool.accounts[0].backoffLevel).toBe(2);
+
+			markAccountSuccess(pool, "acct-a", 400_000);
+			expect(pool.accounts[0].backoffLevel).toBe(0);
+			expect(pool.accounts[0].cooldownUntil).toBeUndefined();
 		});
 	});
 });

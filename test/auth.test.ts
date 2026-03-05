@@ -1,14 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
 	createState,
 	parseAuthorizationInput,
 	decodeJWT,
 	createAuthorizationFlow,
+	refreshAccessTokenWithRetry,
 	CLIENT_ID,
 	AUTHORIZE_URL,
 	REDIRECT_URI,
 	SCOPE,
 } from '../lib/auth/auth.js';
+import * as authModule from '../lib/auth/auth.js';
 
 describe('Auth Module', () => {
 	describe('createState', () => {
@@ -138,6 +140,96 @@ describe('Auth Module', () => {
 			expect(flow1.state).not.toBe(flow2.state);
 			expect(flow1.pkce.verifier).not.toBe(flow2.pkce.verifier);
 			expect(flow1.url).not.toBe(flow2.url);
+		});
+	});
+
+	describe('refreshAccessTokenWithRetry', () => {
+		afterEach(() => {
+			vi.useRealTimers();
+			vi.restoreAllMocks();
+		});
+
+		function createRefreshSuccessResponse(): Response {
+			return new Response(
+				JSON.stringify({
+					access_token: 'new-access',
+					refresh_token: 'new-refresh',
+					expires_in: 9999,
+				}),
+				{ status: 200 },
+			);
+		}
+
+		it('returns success on first attempt', async () => {
+			const fetchSpy = vi
+				.spyOn(globalThis, 'fetch')
+				.mockResolvedValue(createRefreshSuccessResponse());
+
+			const result = await refreshAccessTokenWithRetry('token', 3);
+			expect(result.type).toBe('success');
+			expect(fetchSpy).toHaveBeenCalledTimes(1);
+			expect(fetchSpy).toHaveBeenCalledWith(
+				authModule.TOKEN_URL,
+				expect.objectContaining({ method: 'POST' }),
+			);
+		});
+
+		it('retries on failure and succeeds on second attempt', async () => {
+			vi.useFakeTimers();
+			const fetchSpy = vi
+				.spyOn(globalThis, 'fetch')
+				.mockResolvedValueOnce(new Response('expired', { status: 401 }))
+				.mockResolvedValueOnce(createRefreshSuccessResponse());
+
+			const pending = refreshAccessTokenWithRetry('token', 3);
+			await vi.runAllTimersAsync();
+			const result = await pending;
+
+			expect(result.type).toBe('success');
+			expect(fetchSpy).toHaveBeenCalledTimes(2);
+		});
+
+		it('returns failed after exhausting all retries', async () => {
+			vi.useFakeTimers();
+			const fetchSpy = vi
+				.spyOn(globalThis, 'fetch')
+				.mockResolvedValue(new Response('expired', { status: 401 }));
+
+			const pending = refreshAccessTokenWithRetry('token', 2);
+			await vi.runAllTimersAsync();
+			const result = await pending;
+
+			expect(result.type).toBe('failed');
+			expect(fetchSpy).toHaveBeenCalledTimes(2);
+		});
+
+		it('handles refresh_token_reused fetch errors as failed result', async () => {
+			vi.useFakeTimers();
+			const fetchSpy = vi
+				.spyOn(globalThis, 'fetch')
+				.mockRejectedValue(new Error('refresh_token_reused: token has been invalidated'));
+
+			const pending = refreshAccessTokenWithRetry('token', 3);
+			await vi.runAllTimersAsync();
+			const result = await pending;
+
+			expect(result.type).toBe('failed');
+			expect(fetchSpy).toHaveBeenCalledTimes(3);
+		});
+
+		it('retries on retryable thrown errors', async () => {
+			vi.useFakeTimers();
+			const fetchSpy = vi
+				.spyOn(globalThis, 'fetch')
+				.mockRejectedValueOnce(new Error('network timeout'))
+				.mockResolvedValueOnce(createRefreshSuccessResponse());
+
+			const pending = refreshAccessTokenWithRetry('token', 3);
+			await vi.runAllTimersAsync();
+			const result = await pending;
+
+			expect(result.type).toBe('success');
+			expect(fetchSpy).toHaveBeenCalledTimes(2);
 		});
 	});
 });

@@ -47,7 +47,15 @@ export function normalizeModel(model: string | undefined): string {
 	const normalized = modelId.toLowerCase();
 
 	// Priority order for pattern matching (most specific first):
-	// 1. GPT-5.3 Codex (latest codex model)
+	// 1. GPT-5.4 (general-purpose, consolidates GPT-5.3-Codex capabilities)
+	if (
+		normalized.includes("gpt-5.4") ||
+		normalized.includes("gpt 5.4")
+	) {
+		return "gpt-5.4";
+	}
+
+	// 2. GPT-5.3 Codex (codex-specific model)
 	if (
 		normalized.includes("gpt-5.3-codex") ||
 		normalized.includes("gpt 5.3 codex")
@@ -55,7 +63,7 @@ export function normalizeModel(model: string | undefined): string {
 		return "gpt-5.3-codex";
 	}
 
-	// 2. GPT-5.2 Codex
+	// 3. GPT-5.2 Codex
 	if (
 		normalized.includes("gpt-5.2-codex") ||
 		normalized.includes("gpt 5.2 codex")
@@ -63,12 +71,12 @@ export function normalizeModel(model: string | undefined): string {
 		return "gpt-5.2-codex";
 	}
 
-	// 3. GPT-5.2 (general purpose)
+	// 4. GPT-5.2 (general purpose)
 	if (normalized.includes("gpt-5.2") || normalized.includes("gpt 5.2")) {
 		return "gpt-5.2";
 	}
 
-	// 4. GPT-5.1 Codex Max
+	// 5. GPT-5.1 Codex Max
 	if (
 		normalized.includes("gpt-5.1-codex-max") ||
 		normalized.includes("gpt 5.1 codex max")
@@ -76,7 +84,7 @@ export function normalizeModel(model: string | undefined): string {
 		return "gpt-5.1-codex-max";
 	}
 
-	// 5. GPT-5.1 Codex Mini
+	// 6. GPT-5.1 Codex Mini
 	if (
 		normalized.includes("gpt-5.1-codex-mini") ||
 		normalized.includes("gpt 5.1 codex mini")
@@ -84,7 +92,7 @@ export function normalizeModel(model: string | undefined): string {
 		return "gpt-5.1-codex-mini";
 	}
 
-	// 6. Legacy Codex Mini
+	// 7. Legacy Codex Mini
 	if (
 		normalized.includes("codex-mini-latest") ||
 		normalized.includes("gpt-5-codex-mini") ||
@@ -93,7 +101,7 @@ export function normalizeModel(model: string | undefined): string {
 		return "codex-mini-latest";
 	}
 
-	// 7. GPT-5.1 Codex
+	// 8. GPT-5.1 Codex
 	if (
 		normalized.includes("gpt-5.1-codex") ||
 		normalized.includes("gpt 5.1 codex")
@@ -101,17 +109,17 @@ export function normalizeModel(model: string | undefined): string {
 		return "gpt-5.1-codex";
 	}
 
-	// 8. GPT-5.1 (general-purpose)
+	// 9. GPT-5.1 (general-purpose)
 	if (normalized.includes("gpt-5.1") || normalized.includes("gpt 5.1")) {
 		return "gpt-5.1";
 	}
 
-	// 9. GPT-5 Codex family (any variant with "codex")
+	// 10. GPT-5 Codex family (any variant with "codex")
 	if (normalized.includes("codex")) {
 		return "gpt-5.1-codex";
 	}
 
-	// 10. GPT-5 family (any variant) - default to 5.1 as 5 is being phased out
+	// 11. GPT-5 family (any variant) - default to 5.1 as 5 is being phased out
 	if (normalized.includes("gpt-5") || normalized.includes("gpt 5")) {
 		return "gpt-5.1";
 	}
@@ -185,6 +193,15 @@ function resolveInclude(modelConfig: ConfigOptions, body: RequestBody): string[]
 	return include;
 }
 
+function toPositiveInteger(value: unknown): number | undefined {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return undefined;
+	}
+
+	const normalized = Math.floor(value);
+	return normalized > 0 ? normalized : undefined;
+}
+
 /**
  * Configure reasoning parameters based on model variant and user config
  *
@@ -203,7 +220,12 @@ export function getReasoningConfig(
 ): ReasoningConfig {
 	const normalizedName = modelName?.toLowerCase() ?? "";
 
-	// GPT-5.3 Codex is the latest codex model (supports xhigh, but not "none")
+	// GPT-5.4 is a general-purpose model (supports none/low/medium/high/xhigh)
+	const isGpt54 =
+		normalizedName.includes("gpt-5.4") ||
+		normalizedName.includes("gpt 5.4");
+
+	// GPT-5.3 Codex is a codex-specific model (supports xhigh, but not "none")
 	const isGpt53Codex =
 		normalizedName.includes("gpt-5.3-codex") ||
 		normalizedName.includes("gpt 5.3 codex");
@@ -238,17 +260,18 @@ export function getReasoningConfig(
 		!isCodexMax &&
 		!isCodexMini;
 
-	// GPT 5.3 Codex, GPT 5.2, GPT 5.2 Codex, and Codex Max support xhigh reasoning
+	// GPT 5.4, GPT 5.3 Codex, GPT 5.2, GPT 5.2 Codex, and Codex Max support xhigh reasoning
 	const supportsXhigh =
-		isGpt53Codex || isGpt52General || isGpt52Codex || isCodexMax;
+		isGpt54 || isGpt53Codex || isGpt52General || isGpt52Codex || isCodexMax;
 
-	// GPT 5.1 general and GPT 5.2 general support "none" reasoning per:
+	// GPT 5.1 general, GPT 5.2 general, and GPT 5.4 support "none" reasoning per:
 	// - OpenAI API docs: "gpt-5.1 defaults to none, supports: none, low, medium, high"
 	// - Codex CLI: ReasoningEffort enum includes None variant (codex-rs/protocol/src/openai_models.rs)
 	// - Codex CLI: docs/config.md lists "none" as valid for model_reasoning_effort
 	// - gpt-5.2 (being newer) also supports: none, low, medium, high, xhigh
+	// - gpt-5.4 supports: none, low, medium, high, xhigh (general-purpose model)
 	// - Codex models (including GPT-5.2 Codex) do NOT support "none"
-	const supportsNone = isGpt52General || isGpt51General;
+	const supportsNone = isGpt54 || isGpt52General || isGpt51General;
 
 	// Default based on model type (Codex CLI defaults)
 	// Note: OpenAI docs say gpt-5.1 defaults to "none", but we default to "medium"
@@ -549,6 +572,20 @@ export async function transformRequestBody(
 	// Default: ["reasoning.encrypted_content"] (required for stateless operation with store=false)
 	// This allows reasoning context to persist across turns without server-side storage
 	body.include = resolveInclude(modelConfig, body);
+
+	// Optional long-context controls (currently used for GPT-5.4 1M mode)
+	// Priority: explicit request body > providerOptions > model config defaults
+	const providerOpenAI = body.providerOptions?.openai;
+	body.model_context_window = toPositiveInteger(
+		body.model_context_window ??
+		providerOpenAI?.modelContextWindow ??
+		modelConfig.modelContextWindow,
+	);
+	body.model_auto_compact_token_limit = toPositiveInteger(
+		body.model_auto_compact_token_limit ??
+		providerOpenAI?.modelAutoCompactTokenLimit ??
+		modelConfig.modelAutoCompactTokenLimit,
+	);
 
 	// Remove unsupported parameters
 	body.max_output_tokens = undefined;

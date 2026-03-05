@@ -42,6 +42,7 @@ npx -y opencode-codex-auth@latest --uninstall --all
 ```
 ---
 ## 📦 Models
+- **gpt-5.4** (none/low/medium/high/xhigh, supports configurable 1M experimental context mode)
 - **gpt-5.3-codex** (low/medium/high/xhigh)
 - **gpt-5.2** (none/low/medium/high/xhigh)
 - **gpt-5.2-codex** (low/medium/high/xhigh)
@@ -54,15 +55,18 @@ npx -y opencode-codex-auth@latest --uninstall --all
 - Modern (OpenCode v1.0.210+): `config/opencode-modern.json`
 - Legacy (OpenCode v1.0.209 and below): `config/opencode-legacy.json`
 
+GPT-5.4 uses the standard 272K window by default. To enable 1M experimental long-context mode, set `modelContextWindow=1000000` and `modelAutoCompactTokenLimit=900000` in your model options.
+
 Minimal config is intended for smoke testing only; for stable GPT-5.x variants and presets, use the full configs above.
 ---
 ## ✅ Features
 - ChatGPT Plus/Pro OAuth authentication (official flow)
 - Multi-account support: add multiple ChatGPT accounts and rotate automatically on rate limits/auth failures
-- 26 model presets across GPT‑5.3 Codex / GPT‑5.2 / GPT‑5.2 Codex / GPT‑5.1 families
+- 31 model presets across GPT‑5.4 / GPT‑5.3 Codex / GPT‑5.2 / GPT‑5.2 Codex / GPT‑5.1 families
 - Variant system support (v1.0.210+) + legacy presets
 - Multimodal input enabled for all models
 - Usage‑aware errors + automatic token refresh
+- Account Manager shows remaining percentage when Codex rate-limit headers are available
 
 ## 🔄 Multi-Account Rotation
 
@@ -87,17 +91,17 @@ Example:
 ```json
 {
   "codexMode": true,
-  "accountSelectionStrategy": "round_robin",
-  "rateLimitCooldownSeconds": 300,
-  "authFailureCooldownSeconds": 90,
-  "maxAccountsPerRequest": 5
+  "accountSelectionStrategy": "sticky",
+  "rateLimitCooldownSeconds": 900,
+  "authFailureCooldownSeconds": 270,
+  "maxAccountsPerRequest": 1
 }
 ```
 
 Available strategies:
 
-- `round_robin` (default): rotate through eligible accounts
-- `sticky`: keep using last successful account until it cools down or fails
+- `sticky` (default): keep using last successful account until it cools down or fails
+- `round_robin`: rotate through eligible accounts
 
 ### Account Manager
 

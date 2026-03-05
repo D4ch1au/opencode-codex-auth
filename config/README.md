@@ -8,7 +8,7 @@ This directory contains the official opencode configuration files for the OpenAI
 
 | File | OpenCode Version | Description |
 |------|------------------|-------------|
-| [`opencode-modern.json`](./opencode-modern.json) | **v1.0.210+ (Jan 2026+)** | Compact config using variants system - 7 model families with built-in reasoning variants |
+| [`opencode-modern.json`](./opencode-modern.json) | **v1.0.210+ (Jan 2026+)** | Compact config using variants system - 8 model families with built-in reasoning variants |
 | [`opencode-legacy.json`](./opencode-legacy.json) | **v1.0.209 and below** | Expanded config with separate model entries for each reasoning level |
 
 ### Which one should I use?
@@ -31,13 +31,13 @@ OpenCode v1.0.210+ introduced a **variants system** that allows defining reasoni
 
 | Config File | Model Families | Reasoning Variants | Total Models |
 |------------|----------------|-------------------|--------------|
-| `opencode-modern.json` | 7 | Built-in variants (low/medium/high/xhigh) | 7 base models with 26 total variants |
-| `opencode-legacy.json` | 7 | Separate model entries | 26 individual model definitions |
+| `opencode-modern.json` | 8 | Built-in variants (none/low/medium/high/xhigh) | 8 base models with 31 total variants |
+| `opencode-legacy.json` | 8 | Separate model entries | 31 individual model definitions |
 
 Both configs provide:
-- ✅ All supported GPT 5.3/5.2/5.1 variants: gpt-5.3-codex, gpt-5.2, gpt-5.2-codex, gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-max, gpt-5.1-codex-mini
-- ✅ Proper reasoning effort settings for each variant (including `xhigh` for GPT 5.3 Codex / GPT 5.2 / GPT 5.2 Codex / Codex Max)
-- ✅ Context limits (400k context / 128k output for GPT 5.3 Codex, 272k / 128k for GPT 5.2 and GPT 5.1 families)
+- ✅ All supported GPT 5.4/5.3/5.2/5.1 variants: gpt-5.4, gpt-5.3-codex, gpt-5.2, gpt-5.2-codex, gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-max, gpt-5.1-codex-mini
+- ✅ Proper reasoning effort settings for each variant (including `xhigh` for GPT 5.4 / GPT 5.3 Codex / GPT 5.2 / GPT 5.2 Codex / Codex Max)
+- ✅ Context limits (400k context / 128k output for GPT 5.3 Codex, 272k / 128k default for GPT 5.4, GPT 5.2 and GPT 5.1 families)
 - ✅ Required options: `store: false`, `include: ["reasoning.encrypted_content"]`
 - ✅ Image input support for all models
 - ✅ All required metadata for OpenCode features
@@ -84,6 +84,7 @@ Both configs provide:
 
 Both configs provide access to the same model families:
 
+- **gpt-5.4** (none/low/medium/high/xhigh) - Latest GPT 5.4 model (supports optional 1M experimental context mode)
 - **gpt-5.3-codex** (low/medium/high/xhigh) - Latest GPT 5.3 Codex model
 - **gpt-5.2** (none/low/medium/high/xhigh) - Latest GPT 5.2 model with full reasoning support
 - **gpt-5.2-codex** (low/medium/high/xhigh) - GPT 5.2 Codex presets
@@ -93,6 +94,8 @@ Both configs provide access to the same model families:
 - **gpt-5.1** (none/low/medium/high) - General-purpose reasoning presets
 
 All appear in the opencode model selector as "GPT 5.1 Codex Low (OAuth)", "GPT 5.1 High (OAuth)", etc.
+
+> **GPT-5.4 long-context note**: Templates keep GPT-5.4 at the standard 272K window by default. If needed, set `modelContextWindow=1000000` and `modelAutoCompactTokenLimit=900000` manually for GPT-5.4. Based on OpenAI's announcement, requests beyond the standard 272K context window are metered at a higher rate.
 
 ## Configuration Options
 

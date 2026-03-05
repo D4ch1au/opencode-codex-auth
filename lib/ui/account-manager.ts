@@ -1,5 +1,9 @@
 import { loadAccountPoolState, saveAccountPoolState } from "../account-pool.js";
-import type { OAuthAccountRecord, AccountPoolState } from "../types.js";
+import type {
+	AccountPoolState,
+	AccountRateLimitWindow,
+	OAuthAccountRecord,
+} from "../types.js";
 import { COLORS } from "./ansi.js";
 import { select } from "./select.js";
 import type { MenuItem } from "./select.js";
@@ -68,6 +72,23 @@ function formatCountdown(until: number | undefined): string {
 	return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+function formatRateLimitWindow(window: AccountRateLimitWindow | undefined): string {
+	if (!window) return "N/A";
+
+	const used = `${window.usedPercent.toFixed(1)}% used`;
+	const remaining = `${window.remainingPercent.toFixed(1)}% remaining`;
+	const windowPart =
+		typeof window.windowMinutes === "number"
+			? `, ${window.windowMinutes}m window`
+			: "";
+	const resetPart =
+		typeof window.resetsAt === "number"
+			? `, resets ${formatDate(window.resetsAt)} (${formatCountdown(window.resetsAt)})`
+			: "";
+
+	return `${used} (${remaining})${windowPart}${resetPart}`;
+}
+
 function buildSummary(accounts: OAuthAccountRecord[]): string {
 	if (accounts.length === 0) return "No accounts configured";
 
@@ -111,6 +132,10 @@ async function showAccountDetail(pool: AccountPoolState, accountIndex: number): 
 			`${COLORS.gray}Failure Count:  ${COLORS.reset}${account.failureCount ?? 0}`,
 			`${COLORS.gray}Cooldown Until: ${COLORS.reset}${account.cooldownUntil ? `${formatDate(account.cooldownUntil)} (${formatCountdown(account.cooldownUntil)})` : "None"}`,
 			`${COLORS.gray}Token Expires:  ${COLORS.reset}${formatDate(account.expires)}`,
+			`${COLORS.gray}Rate Limit ID:  ${COLORS.reset}${account.rateLimits?.limitName ?? "N/A"}`,
+			`${COLORS.gray}Primary Usage:  ${COLORS.reset}${formatRateLimitWindow(account.rateLimits?.primary)}`,
+			`${COLORS.gray}Secondary Usage:${COLORS.reset}${formatRateLimitWindow(account.rateLimits?.secondary)}`,
+			`${COLORS.gray}Rate Data At:   ${COLORS.reset}${formatDate(account.rateLimits?.updatedAt)}`,
 		];
 
 		console.log("");
@@ -213,7 +238,7 @@ export async function manageAccounts(): Promise<void> {
 					label: `Account #${i + 1}: ${truncateId(account.accountId)}`,
 					value: { type: "select-account", index: i },
 					badge: formatStatusBadge(status, account),
-					hint: `last used: ${formatRelativeTime(account.lastUsedAt)}`,
+					hint: `last used: ${formatRelativeTime(account.lastUsedAt)}${typeof account.rateLimits?.primary?.remainingPercent === "number" ? `, remaining: ${account.rateLimits.primary.remainingPercent.toFixed(1)}%` : ""}`,
 				});
 			}
 		}

@@ -5,17 +5,24 @@
 
 import type { Auth } from "@opencode-ai/sdk";
 import type { OpencodeClient } from "@opencode-ai/sdk";
-import { refreshAccessToken } from "../auth/auth.js";
+import { refreshAccessToken, refreshAccessTokenWithRetry } from "../auth/auth.js";
 import { logRequest } from "../logger.js";
 import { getCodexInstructions, getModelFamily } from "../prompts/codex.js";
 import { transformRequestBody, normalizeModel } from "./request-transformer.js";
 import { convertSseToJson, ensureContentType } from "./response-handler.js";
-import type { RequestBody, TokenResult, UserConfig } from "../types.js";
+import type {
+	AccountRateLimitSnapshot,
+	AccountRateLimitWindow,
+	RequestBody,
+	TokenResult,
+	UserConfig,
+} from "../types.js";
 import {
 	PLUGIN_NAME,
 	HTTP_STATUS,
 	OPENAI_HEADERS,
 	OPENAI_HEADER_VALUES,
+	CODEX_CLIENT,
 	URL_PATHS,
 	ERROR_MESSAGES,
 	LOG_STAGES,
@@ -83,7 +90,7 @@ export async function refreshAccountTokenWithLock(
 		return existing;
 	}
 
-	const refreshPromise = refreshAccessToken(refreshToken)
+	const refreshPromise = refreshAccessTokenWithRetry(refreshToken)
 		.finally(() => {
 			refreshLocks.delete(accountId);
 		});
@@ -207,6 +214,11 @@ export function createCodexHeaders(
 	headers.set(OPENAI_HEADERS.BETA, OPENAI_HEADER_VALUES.BETA_RESPONSES);
 	headers.set(OPENAI_HEADERS.ORIGINATOR, OPENAI_HEADER_VALUES.ORIGINATOR_CODEX);
 
+	// Fingerprint headers — match official Codex CLI binary to reduce detection surface
+	headers.set("User-Agent", CODEX_CLIENT.USER_AGENT);
+	headers.set("Version", CODEX_CLIENT.VERSION);
+	headers.set("Connection", "Keep-Alive");
+
     const cacheKey = opts?.promptCacheKey;
     if (cacheKey) {
         headers.set(OPENAI_HEADERS.CONVERSATION_ID, cacheKey);
@@ -265,6 +277,95 @@ export async function handleSuccessResponse(
 	});
 }
 
+const PRIMARY_USED_SUFFIX = "-primary-used-percent";
+const SECONDARY_USED_SUFFIX = "-secondary-used-percent";
+
+function parseHeaderNumber(
+	headers: Map<string, string>,
+	key: string,
+): number | undefined {
+	const raw = headers.get(key);
+	if (!raw) return undefined;
+	const value = Number(raw);
+	return Number.isFinite(value) ? value : undefined;
+}
+
+function parseHeaderInteger(
+	headers: Map<string, string>,
+	key: string,
+): number | undefined {
+	const raw = headers.get(key);
+	if (!raw) return undefined;
+	const value = Number.parseInt(raw, 10);
+	return Number.isFinite(value) ? value : undefined;
+}
+
+function pickRateLimitPrefix(headers: Map<string, string>): string | undefined {
+	if (
+		headers.has(`x-codex${PRIMARY_USED_SUFFIX}`)
+		|| headers.has(`x-codex${SECONDARY_USED_SUFFIX}`)
+	) {
+		return "x-codex";
+	}
+
+	for (const key of headers.keys()) {
+		if (key.endsWith(PRIMARY_USED_SUFFIX)) {
+			return key.slice(0, -PRIMARY_USED_SUFFIX.length);
+		}
+		if (key.endsWith(SECONDARY_USED_SUFFIX)) {
+			return key.slice(0, -SECONDARY_USED_SUFFIX.length);
+		}
+	}
+
+	return undefined;
+}
+
+function parseRateLimitWindow(
+	headers: Map<string, string>,
+	prefix: string,
+	window: "primary" | "secondary",
+): AccountRateLimitWindow | undefined {
+	const usedPercent = parseHeaderNumber(headers, `${prefix}-${window}-used-percent`);
+	if (usedPercent === undefined) return undefined;
+
+	const clampedUsed = Math.min(100, Math.max(0, usedPercent));
+	const remainingPercent = Math.min(100, Math.max(0, 100 - clampedUsed));
+	const windowMinutes = parseHeaderInteger(headers, `${prefix}-${window}-window-minutes`);
+	const resetAtSeconds = parseHeaderInteger(headers, `${prefix}-${window}-reset-at`);
+
+	return {
+		usedPercent: clampedUsed,
+		remainingPercent,
+		windowMinutes,
+		resetsAt: resetAtSeconds !== undefined ? resetAtSeconds * 1000 : undefined,
+	};
+}
+
+export function extractAccountRateLimits(
+	headers: Headers,
+	now = Date.now(),
+): AccountRateLimitSnapshot | null {
+	const normalizedHeaders = new Map<string, string>();
+	for (const [name, value] of headers.entries()) {
+		normalizedHeaders.set(name.toLowerCase(), value);
+	}
+
+	const prefix = pickRateLimitPrefix(normalizedHeaders);
+	if (!prefix) return null;
+
+	const primary = parseRateLimitWindow(normalizedHeaders, prefix, "primary");
+	const secondary = parseRateLimitWindow(normalizedHeaders, prefix, "secondary");
+	if (!primary && !secondary) return null;
+
+	return {
+		primary,
+		secondary,
+		limitName: normalizedHeaders.get(`${prefix}-limit-name`) || undefined,
+		promoMessage: normalizedHeaders.get(`${prefix}-promo-message`) || undefined,
+		updatedAt: now,
+	};
+}
+
 export type AccountErrorClass = "none" | "auth" | "rate_limit";
 
 function hasUsageLimitSignal(text: string): boolean {
@@ -313,6 +414,61 @@ export async function classifyAccountErrorResponse(
 	}
 
 	return "none";
+}
+
+/**
+ * Parse server-specified retry-after duration from a rate-limit error response.
+ * Matches CLIProxyAPI's `parseCodexRetryAfter` logic:
+ *  - Only applies to 429 responses with `error.type === "usage_limit_reached"`
+ *  - Prefers `error.resets_at` (Unix timestamp) over `error.resets_in_seconds`
+ *
+ * @returns Cooldown duration in **seconds**, or `null` when unavailable.
+ */
+export async function parseRetryAfterFromResponse(
+	response: Response,
+	now = Date.now(),
+): Promise<number | null> {
+	if (response.status !== HTTP_STATUS.TOO_MANY_REQUESTS) return null;
+
+	const clone = response.clone();
+	let body: string;
+	try {
+		body = await clone.text();
+	} catch {
+		return null;
+	}
+	if (!body) return null;
+
+	try {
+		const parsed = JSON.parse(body) as {
+			error?: {
+				type?: string;
+				resets_at?: number;
+				resets_in_seconds?: number;
+			};
+		};
+
+		if (parsed?.error?.type !== "usage_limit_reached") return null;
+
+		// Prefer resets_at (absolute Unix timestamp in seconds)
+		const resetsAt = parsed.error.resets_at;
+		if (typeof resetsAt === "number" && resetsAt > 0) {
+			const resetAtMs = resetsAt * 1000;
+			if (resetAtMs > now) {
+				return Math.ceil((resetAtMs - now) / 1000);
+			}
+		}
+
+		// Fallback to resets_in_seconds (relative duration)
+		const resetsInSeconds = parsed.error.resets_in_seconds;
+		if (typeof resetsInSeconds === "number" && resetsInSeconds > 0) {
+			return Math.ceil(resetsInSeconds);
+		}
+	} catch {
+		// JSON parse error — no retry info available
+	}
+
+	return null;
 }
 
 async function mapUsageLimit404(response: Response): Promise<Response | null> {

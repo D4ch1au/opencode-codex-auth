@@ -7,10 +7,10 @@ import * as path from 'node:path';
 
 const DEFAULT_CONFIG: PluginConfig = {
 	codexMode: true,
-	accountSelectionStrategy: 'round_robin',
-	rateLimitCooldownSeconds: 300,
-	authFailureCooldownSeconds: 90,
-	maxAccountsPerRequest: 5,
+	accountSelectionStrategy: 'sticky',
+	rateLimitCooldownSeconds: 900,
+	authFailureCooldownSeconds: 270,
+	maxAccountsPerRequest: 1,
 };
 
 // Mock the fs module
@@ -94,7 +94,7 @@ describe('Plugin Configuration', () => {
 
 			const config = loadPluginConfig();
 
-			expect(config.accountSelectionStrategy).toBe('round_robin');
+			expect(config.accountSelectionStrategy).toBe('sticky');
 			expect(config.rateLimitCooldownSeconds).toBe(1);
 			expect(config.authFailureCooldownSeconds).toBe(0);
 			expect(config.maxAccountsPerRequest).toBe(1);
@@ -219,10 +219,10 @@ describe('Plugin Configuration', () => {
 			const runtime = getRuntimeAccountConfig({ codexMode: true });
 
 			expect(runtime).toEqual({
-				strategy: 'round_robin',
-				rateLimitCooldownSeconds: 300,
-				authFailureCooldownSeconds: 90,
-				maxAccountsPerRequest: 5,
+				strategy: 'sticky',
+				rateLimitCooldownSeconds: 900,
+				authFailureCooldownSeconds: 270,
+				maxAccountsPerRequest: 1,
 			});
 		});
 	});
