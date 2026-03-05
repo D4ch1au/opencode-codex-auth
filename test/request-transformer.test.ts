@@ -98,7 +98,14 @@ describe('Request Transformer Module', () => {
 			expect(normalizeModel('gpt-5.4-medium')).toBe('gpt-5.4');
 			expect(normalizeModel('gpt-5.4-high')).toBe('gpt-5.4');
 			expect(normalizeModel('gpt-5.4-xhigh')).toBe('gpt-5.4');
+			expect(normalizeModel('gpt-5.4-1m')).toBe('gpt-5.4');
+			expect(normalizeModel('gpt-5.4-1m-none')).toBe('gpt-5.4');
+			expect(normalizeModel('gpt-5.4-1m-low')).toBe('gpt-5.4');
+			expect(normalizeModel('gpt-5.4-1m-medium')).toBe('gpt-5.4');
+			expect(normalizeModel('gpt-5.4-1m-high')).toBe('gpt-5.4');
+			expect(normalizeModel('gpt-5.4-1m-xhigh')).toBe('gpt-5.4');
 			expect(normalizeModel('openai/gpt-5.4-xhigh')).toBe('gpt-5.4');
+			expect(normalizeModel('openai/gpt-5.4-1m-xhigh')).toBe('gpt-5.4');
 			expect(normalizeModel('openai/gpt-5.4')).toBe('gpt-5.4');
 		});
 
