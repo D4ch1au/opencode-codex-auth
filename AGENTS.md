@@ -98,7 +98,7 @@ The main entry point orchestrates a **7-step fetch flow**:
 - Plugin defaults: `reasoningEffort: "medium"`, `reasoningSummary: "auto"`, `textVerbosity: "medium"`
 
 **4. Model Normalization** (GPT-5.0 → GPT-5.1 migration):
-- All `gpt-5.4*` variants → `gpt-5.4` (general-purpose, consolidates GPT-5.3-Codex capabilities, supports none/low/medium/high/xhigh)
+- All `gpt-5.4*` variants → `gpt-5.4` (general-purpose, consolidates GPT-5.3-Codex capabilities, 1M context, supports none/low/medium/high/xhigh)
 - All `gpt-5.3-codex*` variants → `gpt-5.3-codex` (supports xhigh)
 - All `gpt-5.2-codex*` variants → `gpt-5.2-codex` (supports xhigh)
 - All `gpt-5.1-codex-max*` variants → `gpt-5.1-codex-max`

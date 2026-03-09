@@ -42,8 +42,7 @@ npx -y opencode-codex-auth@latest --uninstall --all
 ```
 ---
 ## 📦 Models
-- **gpt-5.4** (none/low/medium/high/xhigh, standard 272K window)
-- **gpt-5.4-1m** (none/low/medium/high/xhigh, dedicated 1M preset family)
+- **gpt-5.4** (none/low/medium/high/xhigh, 1M context window)
 - **gpt-5.3-codex** (low/medium/high/xhigh)
 - **gpt-5.2** (none/low/medium/high/xhigh)
 - **gpt-5.2-codex** (low/medium/high/xhigh)
@@ -56,17 +55,12 @@ npx -y opencode-codex-auth@latest --uninstall --all
 - Modern (OpenCode v1.0.210+): `config/opencode-modern.json`
 - Legacy (OpenCode v1.0.209 and below): `config/opencode-legacy.json`
 
-GPT-5.4 uses the standard 272K window by default. For dedicated 1M presets (no manual config edits):
-
-- Modern config: `--model=openai/gpt-5.4-1m --variant=medium`
-- Legacy config: `--model=openai/gpt-5.4-1m-medium`
-
 Minimal config is intended for smoke testing only; for stable GPT-5.x variants and presets, use the full configs above.
 ---
 ## ✅ Features
 - ChatGPT Plus/Pro OAuth authentication (official flow)
 - Multi-account support: add multiple ChatGPT accounts and rotate automatically on rate limits/auth failures
-- 36 model presets across GPT‑5.4 / GPT‑5.4-1M / GPT‑5.3 Codex / GPT‑5.2 / GPT‑5.2 Codex / GPT‑5.1 families
+- 31 model presets across GPT‑5.4 / GPT‑5.3 Codex / GPT‑5.2 / GPT‑5.2 Codex / GPT‑5.1 families
 - Variant system support (v1.0.210+) + legacy presets
 - Multimodal input enabled for all models
 - Usage‑aware errors + automatic token refresh

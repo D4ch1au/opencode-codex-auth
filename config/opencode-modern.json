@@ -18,49 +18,6 @@
         "gpt-5.4": {
           "name": "GPT 5.4 (OAuth)",
           "limit": {
-            "context": 272000,
-            "output": 128000
-          },
-          "modalities": {
-            "input": [
-              "text",
-              "image"
-            ],
-            "output": [
-              "text"
-            ]
-          },
-          "variants": {
-            "none": {
-              "reasoningEffort": "none",
-              "reasoningSummary": "auto",
-              "textVerbosity": "medium"
-            },
-            "low": {
-              "reasoningEffort": "low",
-              "reasoningSummary": "auto",
-              "textVerbosity": "medium"
-            },
-            "medium": {
-              "reasoningEffort": "medium",
-              "reasoningSummary": "auto",
-              "textVerbosity": "medium"
-            },
-            "high": {
-              "reasoningEffort": "high",
-              "reasoningSummary": "detailed",
-              "textVerbosity": "medium"
-            },
-            "xhigh": {
-              "reasoningEffort": "xhigh",
-              "reasoningSummary": "detailed",
-              "textVerbosity": "medium"
-            }
-          }
-        },
-        "gpt-5.4-1m": {
-          "name": "GPT 5.4 1M (OAuth)",
-          "limit": {
             "context": 1000000,
             "output": 128000
           },
@@ -72,10 +29,6 @@
             "output": [
               "text"
             ]
-          },
-          "options": {
-            "modelContextWindow": 1000000,
-            "modelAutoCompactTokenLimit": 900000
           },
           "variants": {
             "none": {

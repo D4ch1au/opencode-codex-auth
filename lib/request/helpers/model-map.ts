@@ -21,12 +21,6 @@ export const MODEL_MAP: Record<string, string> = {
 	"gpt-5.4-medium": "gpt-5.4",
 	"gpt-5.4-high": "gpt-5.4",
 	"gpt-5.4-xhigh": "gpt-5.4",
-	"gpt-5.4-1m": "gpt-5.4",
-	"gpt-5.4-1m-none": "gpt-5.4",
-	"gpt-5.4-1m-low": "gpt-5.4",
-	"gpt-5.4-1m-medium": "gpt-5.4",
-	"gpt-5.4-1m-high": "gpt-5.4",
-	"gpt-5.4-1m-xhigh": "gpt-5.4",
 
 // ============================================================================
 // GPT-5.3 Codex Models
