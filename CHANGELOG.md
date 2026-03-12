@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here. Dates use the ISO format (YYYY-MM-DD).
 
+## [4.5.0] - 2026-03-12
+
+**Security & performance release**: Perfect fingerprint alignment with official Codex CLI and smart caching strategy.
+
+### Changed
+- **Fingerprint alignment**: All HTTP headers now match official Codex CLI `rust-v0.114.0` exactly:
+  - Version string updated from `0.101.0` to `0.114.0`
+  - User-Agent now uses realistic OS/terminal values (`Mac OS 15.3.0; arm64`) matching `os_info::get()` output
+  - Removed `Version` header (official CLI never sends it)
+  - Removed `Connection: Keep-Alive` header (official CLI does not set it)
+  - Removed `OpenAI-Beta: responses=experimental` header (value does not exist in official CLI; only WebSocket mode uses `responses_websockets=2026-02-06`)
+  - Removed `conversation_id` header (official CLI only sets `session_id` per `build_conversation_headers()`)
+- **Cache TTL**: Increased from 15 minutes to 6 hours for both Codex instructions and OpenCode prompt caches.
+- **Non-blocking cache refresh**: Stale cache is returned immediately while a background fetch updates it for the next request. Only blocks on network when no cache exists at all.
+- **Startup cache warm-up**: `warmCodexInstructionsCache()` pre-warms all model family caches at plugin load (fire-and-forget).
+
+### Removed
+- `OPENAI_HEADERS.BETA` and `OPENAI_HEADER_VALUES.BETA_RESPONSES` constants (fingerprint leak).
+- `OPENAI_HEADERS.CONVERSATION_ID` constant (official CLI only uses `session_id`).
+
+### References
+- `codex-rs/core/src/default_client.rs`: `get_codex_user_agent()`, `default_headers()`
+- `codex-rs/core/src/client.rs`: `OPENAI_BETA_HEADER`, `build_responses_headers()`
+- `codex-rs/codex-api/src/requests/headers.rs`: `build_conversation_headers()` (only `session_id`)
+
 ## [4.4.0] - 2026-01-09
 
 **Maintenance release**: OAuth success page version sync.

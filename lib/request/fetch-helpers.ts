@@ -28,6 +28,7 @@ import {
 	LOG_STAGES,
 } from "../constants.js";
 
+
 const refreshLocks = new Map<string, Promise<TokenResult>>();
 
 /**
@@ -208,23 +209,22 @@ export function createCodexHeaders(
     opts?: { model?: string; promptCacheKey?: string },
 ): Headers {
 	const headers = new Headers(init?.headers ?? {});
-	headers.delete("x-api-key"); // Remove any existing API key
+	headers.delete("x-api-key");
 	headers.set("Authorization", `Bearer ${accessToken}`);
 	headers.set(OPENAI_HEADERS.ACCOUNT_ID, accountId);
-	headers.set(OPENAI_HEADERS.BETA, OPENAI_HEADER_VALUES.BETA_RESPONSES);
 	headers.set(OPENAI_HEADERS.ORIGINATOR, OPENAI_HEADER_VALUES.ORIGINATOR_CODEX);
 
-	// Fingerprint headers — match official Codex CLI binary to reduce detection surface
+	// Fingerprint: User-Agent only — official CLI does NOT send Version,
+	// Connection, or OpenAI-Beta headers for SSE connections.
+	// Reference: codex-rs/core/src/default_client.rs default_headers()
 	headers.set("User-Agent", CODEX_CLIENT.USER_AGENT);
-	headers.set("Version", CODEX_CLIENT.VERSION);
-	headers.set("Connection", "Keep-Alive");
 
+	// Official CLI only sets session_id (not conversation_id).
+	// Reference: codex-rs/codex-api/src/requests/headers.rs build_conversation_headers()
     const cacheKey = opts?.promptCacheKey;
     if (cacheKey) {
-        headers.set(OPENAI_HEADERS.CONVERSATION_ID, cacheKey);
         headers.set(OPENAI_HEADERS.SESSION_ID, cacheKey);
     } else {
-        headers.delete(OPENAI_HEADERS.CONVERSATION_ID);
         headers.delete(OPENAI_HEADERS.SESSION_ID);
     }
     headers.set("accept", "text/event-stream");

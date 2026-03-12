@@ -26,16 +26,13 @@ export const HTTP_STATUS = {
 
 /** OpenAI-specific headers */
 export const OPENAI_HEADERS = {
-	BETA: "OpenAI-Beta",
 	ACCOUNT_ID: "chatgpt-account-id",
 	ORIGINATOR: "originator",
 	SESSION_ID: "session_id",
-	CONVERSATION_ID: "conversation_id",
 } as const;
 
 /** OpenAI-specific header values */
 export const OPENAI_HEADER_VALUES = {
-	BETA_RESPONSES: "responses=experimental",
 	ORIGINATOR_CODEX: "codex_cli_rs",
 } as const;
 
@@ -43,14 +40,15 @@ export const OPENAI_HEADER_VALUES = {
  * Codex CLI fingerprint constants — match the official Rust CLI binary
  * to reduce detection surface against server-side client fingerprinting.
  *
- * Values sourced from: codex_cli_rs v0.101.0 (latest stable)
+ * Values sourced from: codex_cli_rs v0.114.0 (rust-v0.114.0)
+ * Reference: codex-rs/core/src/default_client.rs get_codex_user_agent()
  */
 export const CODEX_CLIENT = {
-	/** Version string sent in the `Version` header */
-	VERSION: "0.101.0",
+	/** Cargo package version of the official CLI */
+	VERSION: "0.114.0",
 	/** User-Agent matching the official macOS Codex CLI binary */
 	USER_AGENT:
-		"codex_cli_rs/0.101.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464",
+		"codex_cli_rs/0.114.0 (Mac OS 15.3.0; arm64) iTerm.app/3.5.0",
 } as const;
 
 /** URL path segments */

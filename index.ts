@@ -57,6 +57,7 @@ import {
 	PROVIDER_ID,
 } from "./lib/constants.js";
 import { logRequest, logDebug } from "./lib/logger.js";
+import { warmCodexInstructionsCache } from "./lib/prompts/codex.js";
 import {
 	classifyAccountErrorResponse,
 	createCodexHeaders,
@@ -153,6 +154,9 @@ export const OpenAIAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 				const pluginConfig = loadPluginConfig();
 				const codexMode = getCodexMode(pluginConfig);
 				const runtimeAccountConfig = getRuntimeAccountConfig(pluginConfig);
+
+				// Pre-warm Codex instructions cache (fire-and-forget, non-blocking)
+				warmCodexInstructionsCache();
 
 				// Return SDK configuration
 				return {

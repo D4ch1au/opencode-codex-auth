@@ -21,17 +21,111 @@ interface CacheMeta {
 	lastChecked: number; // Timestamp for rate limit protection
 }
 
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+let pendingRefresh: Promise<void> | null = null;
+
 /**
- * Fetch OpenCode's codex.txt prompt with ETag-based caching
- * Uses HTTP conditional requests to efficiently check for updates
+ * Perform the actual GitHub fetch and update cache files.
+ */
+async function fetchAndCachePrompt(
+	cachedEtag: string | null,
+): Promise<string | null> {
+	const headers: Record<string, string> = {};
+	if (cachedEtag) {
+		headers["If-None-Match"] = cachedEtag;
+	}
+
+	const response = await fetch(OPENCODE_CODEX_URL, { headers });
+
+	if (response.status === 304) {
+		// Not modified — update lastChecked only
+		await mkdir(CACHE_DIR, { recursive: true });
+		await writeFile(
+			CACHE_META_FILE,
+			JSON.stringify(
+				{
+					etag: cachedEtag ?? "",
+					lastFetch: new Date().toISOString(),
+					lastChecked: Date.now(),
+				} satisfies CacheMeta,
+				null,
+				2,
+			),
+			"utf-8",
+		);
+		try {
+			return await readFile(CACHE_FILE, "utf-8");
+		} catch {
+			return null;
+		}
+	}
+
+	if (response.ok) {
+		const content = await response.text();
+		const etag = response.headers.get("etag") || "";
+
+		await mkdir(CACHE_DIR, { recursive: true });
+		await writeFile(CACHE_FILE, content, "utf-8");
+		await writeFile(
+			CACHE_META_FILE,
+			JSON.stringify(
+				{
+					etag,
+					lastFetch: new Date().toISOString(),
+					lastChecked: Date.now(),
+				} satisfies CacheMeta,
+				null,
+				2,
+			),
+			"utf-8",
+		);
+
+		return content;
+	}
+
+	throw new Error(`Failed to fetch OpenCode codex.txt: ${response.status}`);
+}
+
+/**
+ * Fire a non-blocking background refresh.
+ * Errors are silently swallowed when cached content exists.
+ */
+function triggerBackgroundRefresh(
+	cachedEtag: string | null,
+	hasCachedContent: boolean,
+): void {
+	if (pendingRefresh) return;
+
+	pendingRefresh = fetchAndCachePrompt(cachedEtag)
+		.catch((error) => {
+			if (!hasCachedContent) {
+				console.error(
+					`[openai-codex-plugin] Background refresh of OpenCode prompt failed:`,
+					(error as Error).message,
+				);
+			}
+		})
+		.then(() => {})
+		.finally(() => {
+			pendingRefresh = null;
+		});
+}
+
+/**
+ * Fetch OpenCode's codex.txt prompt with ETag-based caching.
  *
- * Rate limit protection: Only checks GitHub if cache is older than 15 minutes
+ * Non-blocking strategy:
+ *  - If cache is within 6h TTL, return immediately.
+ *  - If cache is stale but present, return it immediately AND trigger
+ *    a background refresh for the next request.
+ *  - Only blocks on network when no cache exists at all.
+ *
  * @returns The codex.txt content
  */
 export async function getOpenCodeCodexPrompt(): Promise<string> {
 	await mkdir(CACHE_DIR, { recursive: true });
 
-	// Try to load cached content and metadata
 	let cachedContent: string | null = null;
 	let cachedMeta: CacheMeta | null = null;
 
@@ -40,69 +134,37 @@ export async function getOpenCodeCodexPrompt(): Promise<string> {
 		const metaContent = await readFile(CACHE_META_FILE, "utf-8");
 		cachedMeta = JSON.parse(metaContent);
 	} catch {
-		// Cache doesn't exist or is invalid, will fetch fresh
+		// Cache doesn't exist or is invalid
 	}
 
-	// Rate limit protection: If cache is less than 15 minutes old, use it
-	const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
-	if (cachedMeta?.lastChecked && (Date.now() - cachedMeta.lastChecked) < CACHE_TTL_MS && cachedContent) {
+	const isFresh =
+		cachedMeta?.lastChecked != null &&
+		Date.now() - cachedMeta.lastChecked < CACHE_TTL_MS &&
+		cachedContent != null;
+
+	// Fast path: cache is fresh
+	if (isFresh && cachedContent) {
 		return cachedContent;
 	}
 
-	// Fetch from GitHub with conditional request
-	const headers: Record<string, string> = {};
-	if (cachedMeta?.etag) {
-		headers["If-None-Match"] = cachedMeta.etag;
+	// Stale cache exists — return it now, refresh in background
+	if (cachedContent) {
+		triggerBackgroundRefresh(cachedMeta?.etag ?? null, true);
+		return cachedContent;
 	}
 
+	// No cache — must fetch synchronously
 	try {
-		const response = await fetch(OPENCODE_CODEX_URL, { headers });
-
-		// 304 Not Modified - cache is still valid
-		if (response.status === 304 && cachedContent) {
-			return cachedContent;
-		}
-
-		// 200 OK - new content available
-		if (response.ok) {
-			const content = await response.text();
-			const etag = response.headers.get("etag") || "";
-
-			// Save to cache with timestamp
-			await writeFile(CACHE_FILE, content, "utf-8");
-			await writeFile(
-				CACHE_META_FILE,
-				JSON.stringify(
-					{
-						etag,
-						lastFetch: new Date().toISOString(), // Keep for backwards compat
-						lastChecked: Date.now(),
-					} satisfies CacheMeta,
-					null,
-					2
-				),
-				"utf-8"
-			);
-
-			return content;
-		}
-
-		// Fallback to cache if available
-		if (cachedContent) {
-			return cachedContent;
-		}
-
-		throw new Error(`Failed to fetch OpenCode codex.txt: ${response.status}`);
+		const result = await fetchAndCachePrompt(cachedMeta?.etag ?? null);
+		if (result) return result;
 	} catch (error) {
-		// Network error - fallback to cache
-		if (cachedContent) {
-			return cachedContent;
-		}
-
+		// No cache and fetch failed — nothing we can do
 		throw new Error(
-			`Failed to fetch OpenCode codex.txt and no cache available: ${error}`
+			`Failed to fetch OpenCode codex.txt and no cache available: ${error}`,
 		);
 	}
+
+	throw new Error("Failed to fetch OpenCode codex.txt and no cache available");
 }
 
 /**

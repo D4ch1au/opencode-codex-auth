@@ -141,11 +141,14 @@ describe('Fetch Helpers Module', () => {
 
 	    expect(headers.get('Authorization')).toBe(`Bearer ${accessToken}`);
 	    expect(headers.get(OPENAI_HEADERS.ACCOUNT_ID)).toBe(accountId);
-	    expect(headers.get(OPENAI_HEADERS.BETA)).toBe(OPENAI_HEADER_VALUES.BETA_RESPONSES);
 	    expect(headers.get(OPENAI_HEADERS.ORIGINATOR)).toBe(OPENAI_HEADER_VALUES.ORIGINATOR_CODEX);
 	    expect(headers.get(OPENAI_HEADERS.SESSION_ID)).toBe('session-1');
-	    expect(headers.get(OPENAI_HEADERS.CONVERSATION_ID)).toBe('session-1');
 	    expect(headers.get('accept')).toBe('text/event-stream');
+	    // Official CLI does NOT send OpenAI-Beta, Version, Connection, or conversation_id
+	    expect(headers.has('OpenAI-Beta')).toBe(false);
+	    expect(headers.has('Version')).toBe(false);
+	    expect(headers.has('Connection')).toBe(false);
+	    expect(headers.has('conversation_id')).toBe(false);
     });
 
 		it('maps usage-limit 404 errors to 429', async () => {
@@ -185,16 +188,15 @@ describe('Fetch Helpers Module', () => {
 			expect(headers.get('Content-Type')).toBe('application/json');
 		});
 
-		it('should use provided promptCacheKey for both conversation_id and session_id', () => {
+		it('should use provided promptCacheKey for session_id only', () => {
 			const key = 'ses_abc123';
 			const headers = createCodexHeaders(undefined, accountId, accessToken, { promptCacheKey: key });
-			expect(headers.get(OPENAI_HEADERS.CONVERSATION_ID)).toBe(key);
 			expect(headers.get(OPENAI_HEADERS.SESSION_ID)).toBe(key);
+			expect(headers.has('conversation_id')).toBe(false);
 		});
 
-		it('does not set conversation/session headers when no promptCacheKey provided', () => {
+		it('does not set session_id header when no promptCacheKey provided', () => {
 			const headers = createCodexHeaders(undefined, accountId, accessToken, { model: 'gpt-5' });
-			expect(headers.get(OPENAI_HEADERS.CONVERSATION_ID)).toBeNull();
 			expect(headers.get(OPENAI_HEADERS.SESSION_ID)).toBeNull();
 		});
     });
@@ -287,14 +289,19 @@ describe('Fetch Helpers Module', () => {
 			expect(headers.get('User-Agent')).toBe(CODEX_CLIENT.USER_AGENT);
 		});
 
-		it('sets Version header matching official Codex CLI', () => {
+		it('does NOT set Version header (official CLI omits it)', () => {
 			const headers = createCodexHeaders(undefined, accountId, accessToken);
-			expect(headers.get('Version')).toBe(CODEX_CLIENT.VERSION);
+			expect(headers.has('Version')).toBe(false);
 		});
 
-		it('sets Connection: Keep-Alive header', () => {
+		it('does NOT set Connection header (official CLI omits it)', () => {
 			const headers = createCodexHeaders(undefined, accountId, accessToken);
-			expect(headers.get('Connection')).toBe('Keep-Alive');
+			expect(headers.has('Connection')).toBe(false);
+		});
+
+		it('does NOT set OpenAI-Beta header for SSE (official CLI omits it)', () => {
+			const headers = createCodexHeaders(undefined, accountId, accessToken);
+			expect(headers.has('OpenAI-Beta')).toBe(false);
 		});
 	});
 
