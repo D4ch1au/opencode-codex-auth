@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. Dates use the ISO format (YYYY-MM-DD).
 
+## [4.5.2] - 2026-03-15
+
+**Patch release (package v1.4.2)**: Adds repository hygiene rules so local artifacts and line-ending noise do not override future upstream updates.
+
+### Added
+- **Git attributes policy**: New `.gitattributes` enforces LF for TypeScript, JavaScript, JSON, and Markdown files to keep future upstream syncs stable across Windows environments.
+
+### Changed
+- **Ignore rules**: `.gitignore` now excludes `.tmp-opencode-config-schema.json` and `nul` so local generated artifacts and abnormal shell leftovers stop polluting repository status.
+
 ## [4.5.1] - 2026-03-15
 
 **Patch release (package v1.4.1)**: Adds a Codex instruction post-processor hook that rewrites fetched instructions before request transformation.

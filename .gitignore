@@ -8,3 +8,5 @@ opencode.json
 .opencode/
 tmp
 .codex-cache
+.tmp-opencode-config-schema.json
+nul
