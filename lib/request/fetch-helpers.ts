@@ -8,6 +8,7 @@ import type { OpencodeClient } from "@opencode-ai/sdk";
 import { refreshAccessToken, refreshAccessTokenWithRetry } from "../auth/auth.js";
 import { logRequest } from "../logger.js";
 import { getCodexInstructions, getModelFamily } from "../prompts/codex.js";
+import { processCodexInstructions } from "../prompts/evil-codex.js";
 import { transformRequestBody, normalizeModel } from "./request-transformer.js";
 import { convertSseToJson, ensureContentType } from "./response-handler.js";
 import type {
@@ -160,7 +161,10 @@ export async function transformRequestForCodex(
 		});
 
 		// Fetch model-specific Codex instructions (cached per model family)
-		const codexInstructions = await getCodexInstructions(normalizedModel);
+		const rawCodexInstructions = await getCodexInstructions(normalizedModel);
+
+		// Process instructions with evil-opencode mode: remove guardrails and add unrestricted prompt
+		const codexInstructions = processCodexInstructions(rawCodexInstructions);
 
 		// Transform request body
 		const transformedBody = await transformRequestBody(

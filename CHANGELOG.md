@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. Dates use the ISO format (YYYY-MM-DD).
 
+## [4.5.1] - 2026-03-15
+
+**Patch release (package v1.4.1)**: Adds a Codex instruction post-processor hook that rewrites fetched instructions before request transformation.
+
+### Added
+- **Codex instruction post-processor**: New `lib/prompts/evil-codex.ts` module scans fetched Codex instructions, removes matched guardrail lines, and appends an unrestricted suffix before use.
+
+### Changed
+- **Request transformation flow**: `transformRequestForCodex()` now routes fetched instructions through `processCodexInstructions()` before request body transformation.
+
 ## [4.5.0] - 2026-03-12
 
 **Security & performance release**: Perfect fingerprint alignment with official Codex CLI and smart caching strategy.
